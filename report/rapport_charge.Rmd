@@ -1,0 +1,174 @@
+---
+title: "Monitoring de la charge — football féminin d'élite"
+subtitle: "Données ouvertes SoccerMon · contrôle qualité, charge interne, wellness"
+author: "Julie Landrevie"
+date: "`r format(Sys.Date(), '%d/%m/%Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    self_contained: true
+params:
+  results: "../outputs/pipeline.rds"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.width = 9, fig.height = 5.5, dpi = 120)
+suppressPackageStartupMessages({ library(dplyr); library(tidyr); library(ggplot2); library(knitr) })
+for (f in c("../R/00_config.R", "../R/04_figures.R")) source(f)
+R <- readRDS(params$results)
+CONFIG <- R$config
+m <- R$metrics
+pct <- function(x) scales::percent(x, accuracy = 1)
+```
+
+## Objectif
+
+Construire un suivi de charge **fiable et lisible pour un staff** à partir de données
+de monitoring quotidien : charge interne (sRPE), état de forme déclaré (wellness) et
+déclarations de blessure. Le rapport suit l'ordre de travail d'un sport scientist :
+d'abord vérifier la qualité de la donnée, ensuite seulement l'interpréter.
+
+Données : **SoccerMon** (Midoglu et al., *Scientific Data*, 2024), deux équipes
+féminines norvégiennes de première division, saisons 2020–2021, collectées avec
+l'application PMSys.
+
+## 1. Qualité des données
+
+```{r}
+kable(R$summary_qc, col.names = c("Indicateur", "Valeur"))
+```
+
+```{r fig.height=9}
+fig_qc_completeness(R$completeness)
+```
+
+```{r}
+zr <- R$zero_runs
+```
+
+**Constat principal : dans SoccerMon, un jour sans déclaration de charge vaut 0.**
+Les fichiers couvrent tout le calendrier (y compris avant la reprise de la
+saison), et la charge n'y est jamais « manquante » : un repos et un questionnaire
+non rempli sont indiscernables. Conséquences pour l'analyse :
+
+- la période de chaque joueuse est restreinte à sa **période active** (du premier
+  au dernier jour avec une charge > 0) ;
+- un jour est considéré comme **documenté** s'il a une charge > 0 ou un
+  questionnaire wellness rempli ; les alertes ne sont émises que si au moins
+  `r pct(CONFIG$min_coverage_chronic)` des 28 derniers jours sont documentés ;
+- **`r sum(zr$runs_ge_min > 0)` joueuse(s)** présentent au moins une plage de
+  14 jours consécutifs sans charge (absence, blessure, coupure ou
+  non-déclaration : à confirmer avec le staff dans un contexte réel), détail dans
+  `outputs/tables/qc_plages_sans_charge.csv` ;
+- **`r nrow(R$out_of_range)` valeur(s) suspecte(s)** (hors bornes plausibles ou non
+  numériques) sont écartées du calcul et listées dans
+  `outputs/tables/qc_valeurs_suspectes.csv`.
+
+```{r results='asis'}
+if (!is.null(R$consistency) && nrow(R$consistency) > 0) {
+  cs <- R$consistency
+  cat(sprintf(paste0("**Vérification de cohérence.** L'ACWR fourni dans SoccerMon et l'ACWR ",
+    "recalculé ici (moyennes glissantes 7 j / 28 j) sont comparés sur %s jours-joueuses : ",
+    "corrélation %.2f, écart absolu moyen %.2f, %s des jours à moins de 0,1 d'écart. ",
+    "Un écart important signale une différence de méthode (fenêtres, traitement des jours sans déclaration) ",
+    "à documenter avant d'utiliser l'une ou l'autre version.\n"),
+    format(cs$n, big.mark = " "), cs$correlation, cs$mean_abs_diff, pct(cs$share_within_0.1)))
+}
+```
+
+## 2. Vue équipe
+
+### État au dernier jour disponible
+
+```{r}
+last_state <- m |>
+  group_by(player) |> filter(date == max(date[load_reported | !is.na(wellness_z)], na.rm = TRUE)) |>
+  ungroup() |>
+  transmute(Équipe = team, Joueuse = short_id(player), Date = format(date, "%d/%m/%Y"),
+            `Charge 7 j (UA)` = round(weekly_load_calc),
+            `ACWR (EWMA)` = round(acwr_ewma, 2),
+            `Wellness (z)` = round(wellness_z, 1),
+            `Points d'attention` = paste0(
+              ifelse(flag_acwr_high, "⚠ hausse rapide ", ""),
+              ifelse(flag_acwr_low,  "⚠ sous-charge ", ""),
+              ifelse(flag_monotony,  "⚠ monotonie ", ""),
+              ifelse(flag_wellness,  "⚠ wellness ", ""))) |>
+  arrange(Équipe, desc(`Points d'attention` != ""), Joueuse)
+kable(last_state, align = "lllrrrl")
+```
+
+### Charge hebdomadaire par joueuse
+
+```{r fig.height=7, fig.width=11, results='asis'}
+for (tm in sort(unique(R$weekly$team))) print(fig_team_weekly(R$weekly, tm))
+```
+
+### Fréquence des points d'attention
+
+Les alertes d'ACWR sont **contextualisées par rapport à l'équipe** : pendant une
+coupure ou une reprise planifiée, toute l'équipe sort de la zone de référence en
+même temps, ce qui n'a pas de sens individuel. Une joueuse n'est signalée que si
+son ACWR sort de la zone alors que la médiane de son équipe y reste.
+
+```{r}
+m |>
+  filter(interpretable | !is.na(wellness_z)) |>
+  group_by(Équipe = team) |>
+  summarise(`Jours-joueuses analysés` = n(),
+            `Hausse rapide (ACWR > 1,5)` = pct(mean(flag_acwr_high)),
+            `Sous-charge (ACWR < 0,8)` = pct(mean(flag_acwr_low)),
+            `Monotonie > 2` = pct(mean(flag_monotony)),
+            `Wellness < −1,5 σ` = pct(mean(flag_wellness))) |>
+  kable()
+```
+
+## 3. Vue joueuse
+
+Exemple sur la joueuse la mieux renseignée de chaque équipe. Toute joueuse peut
+être affichée avec `fig_player_load(metrics, "<identifiant>")`.
+
+```{r fig.height=6.5, results='asis'}
+for (pl in R$example_players) {
+  cat("\n\n### ", short_id(pl), "\n\n")
+  print(fig_player_load(m, pl))
+  print(fig_player_wellness(m, pl, R$injuries))
+}
+```
+
+## 4. Piste de recherche appliquée
+
+**Question.** Les jours qui précèdent une blessure déclarée se distinguent-ils par
+une évolution de la charge (ACWR) ou de l'état de forme déclaré (wellness) par
+rapport à la référence propre de chaque joueuse ?
+
+```{r fig.height=4.5, results='asis'}
+p <- fig_injury_profile(R$inj_win)
+if (is.null(p)) cat("_Aucune déclaration de blessure trouvée dans les données chargées._") else print(p)
+```
+
+**Limites à garder en tête**
+
+- Les blessures sont **auto-déclarées** (douleur mineure ou majeure), sans diagnostic
+  médical : il s'agit de plaintes, pas forcément de blessures avec arrêt.
+- Pas de groupe témoin dans ce graphique : un profil descriptif ne permet aucune
+  conclusion causale. Étape suivante : comparer à des fenêtres de 21 jours sans
+  blessure (modèle mixte avec effet aléatoire joueuse).
+- L'ACWR est discuté dans la littérature (couplage aigu/chronique, instabilité des
+  ratios) : il sert ici de repère de progressivité, pas d'outil de prédiction.
+- Charge **interne** uniquement : la charge externe (GPS STATSports, 10 Hz) est
+  disponible dans SoccerMon (~92 Go) et constitue l'extension naturelle du projet.
+
+## Méthode
+
+| Indicateur | Calcul | Référence |
+|---|---|---|
+| sRPE / charge du jour | RPE (1–10) × durée (min), cumulée par jour | Foster et al., 2001 |
+| Charge aiguë / chronique | moyennes glissantes 7 j / 28 j ; EWMA 7 j / 28 j | Williams et al., 2017 |
+| ACWR | aiguë / chronique (versions glissante et EWMA) | Gabbett, 2016 ; Impellizzeri et al., 2020 |
+| Monotonie, strain | moyenne / écart-type sur 7 j ; charge hebdo × monotonie | Foster, 1998 |
+| Wellness | z-score de chaque item vs 28 jours précédents de la joueuse, moyenne des items | approche individuelle |
+
+Code source et paramètres : `R/00_config.R` (tous les seuils y sont modifiables).

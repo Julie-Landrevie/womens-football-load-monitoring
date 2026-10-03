@@ -1,0 +1,122 @@
+#!/usr/bin/env Rscript
+# =============================================================================
+# run_pipeline.R — Exécute tout le pipeline
+#   Rscript run_pipeline.R                 # données dans data/raw
+#   SOCCERMON_DIR=/chemin Rscript run_pipeline.R
+# Sorties : outputs/tables/*.csv, outputs/figures/*.png, outputs/rapport_charge.html
+# =============================================================================
+
+local({
+  here <- tryCatch(dirname(normalizePath(sys.frame(1)$ofile)), error = function(e) NULL)
+  if (is.null(here)) {
+    a <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+    if (length(a)) here <- dirname(normalizePath(sub("^--file=", "", a)))
+  }
+  if (!is.null(here)) setwd(here)
+})
+
+for (f in sort(list.files("R", pattern = "\\.R$", full.names = TRUE))) source(f)
+
+out_tab <- file.path(CONFIG$output_dir, "tables")
+out_fig <- file.path(CONFIG$output_dir, "figures")
+dir.create(out_tab, recursive = TRUE, showWarnings = FALSE)
+dir.create(out_fig, recursive = TRUE, showWarnings = FALSE)
+
+message("1/5 Chargement des données : ", CONFIG$data_dir)
+daily_long <- load_daily()
+injuries   <- load_injuries()
+
+message("2/5 Contrôle qualité")
+completeness <- qc_completeness(daily_long)
+out_of_range <- qc_out_of_range(daily_long)
+duplicates   <- qc_duplicates(daily_long)
+zero_runs    <- qc_zero_runs(daily_long)
+summary_qc   <- qc_summary(daily_long, completeness, out_of_range, duplicates, zero_runs)
+print(as.data.frame(summary_qc), right = FALSE)
+wide <- daily_long |> clean_values(out_of_range) |> to_wide()
+
+message("3/5 Indicateurs de charge et wellness")
+metrics <- wide |>
+  compute_load_metrics() |>
+  compute_wellness_z() |>
+  compute_flags()
+consistency <- qc_consistency(metrics)
+weekly      <- weekly_summary(metrics)
+inj_win     <- injury_windows(metrics, injuries)
+
+alerts <- metrics |>
+  filter(n_flags > 0) |>
+  transmute(team, player, date,
+            acwr_ewma = round(acwr_ewma, 2), monotony = round(monotony_calc, 2),
+            wellness_z = round(wellness_z, 2),
+            motifs = paste0(
+              ifelse(flag_acwr_high, "charge en hausse rapide; ", ""),
+              ifelse(flag_acwr_low,  "sous-charge; ", ""),
+              ifelse(flag_monotony,  "monotonie élevée; ", ""),
+              ifelse(flag_wellness,  "wellness en baisse; ", "")) |> sub("; $", "", x = _))
+
+message("4/5 Export des tables et figures")
+write_csv(summary_qc,   file.path(out_tab, "qc_synthese.csv"))
+write_csv(completeness, file.path(out_tab, "qc_completude.csv"))
+write_csv(out_of_range, file.path(out_tab, "qc_valeurs_suspectes.csv"))
+write_csv(zero_runs,    file.path(out_tab, "qc_plages_sans_charge.csv"))
+write_csv(metrics,      file.path(out_tab, "indicateurs_journaliers.csv"))
+write_csv(weekly,       file.path(out_tab, "synthese_hebdomadaire.csv"))
+write_csv(alerts,       file.path(out_tab, "points_attention.csv"))
+
+save_fig <- function(p, name, w = 9, h = 6) {
+  if (!is.null(p)) ggsave(file.path(out_fig, name), p, width = w, height = h, dpi = 150, bg = "white")
+}
+save_fig(fig_qc_completeness(completeness), "01_qc_completude.png", h = 10)
+for (tm in sort(unique(weekly$team))) {
+  save_fig(fig_team_weekly(weekly, tm), paste0("02_equipe_", tm, ".png"), w = 11, h = 7)
+}
+# Joueuses d'exemple : celles avec la meilleure couverture de charge
+example_players <- completeness |>
+  filter(variable == "daily_load (> 0)") |>
+  group_by(team) |> slice_max(completeness, n = 1, with_ties = FALSE) |> pull(player)
+for (pl in example_players) {
+  save_fig(fig_player_load(metrics, pl), paste0("03_charge_", short_id(pl), ".png"), h = 6.5)
+  save_fig(fig_player_wellness(metrics, pl, injuries), paste0("04_wellness_", short_id(pl), ".png"), h = 4.5)
+}
+save_fig(fig_injury_profile(inj_win), "05_profil_pre_blessure.png", h = 4.5)
+
+saveRDS(list(daily_long = daily_long, injuries = injuries, metrics = metrics,
+             completeness = completeness, out_of_range = out_of_range,
+             duplicates = duplicates, summary_qc = summary_qc, zero_runs = zero_runs,
+             consistency = consistency, weekly = weekly, alerts = alerts,
+             inj_win = inj_win, example_players = example_players,
+             config = CONFIG, data_dir = CONFIG$data_dir),
+        file.path(CONFIG$output_dir, "pipeline.rds"))
+
+message("5/5 Rapport HTML")
+# Pandoc : si absent du PATH, on le cherche dans RStudio / Homebrew
+if (requireNamespace("rmarkdown", quietly = TRUE) && !rmarkdown::pandoc_available()) {
+  candidates <- c(
+    "/Applications/RStudio.app/Contents/Resources/app/quarto/bin/tools/aarch64",
+    "/Applications/RStudio.app/Contents/Resources/app/quarto/bin/tools/x86_64",
+    "/Applications/RStudio.app/Contents/Resources/app/quarto/bin/tools",
+    "/Applications/RStudio.app/Contents/Resources/app/bin/quarto/bin/tools",
+    "/Applications/RStudio.app/Contents/MacOS/pandoc",
+    "/opt/homebrew/bin", "/usr/local/bin")
+  hit <- candidates[file.exists(file.path(candidates, "pandoc"))][1]
+  if (!is.na(hit)) {
+    Sys.setenv(RSTUDIO_PANDOC = hit)
+    rmarkdown::find_pandoc(cache = FALSE)
+    message("   Pandoc trouvé : ", hit)
+  }
+}
+if (requireNamespace("rmarkdown", quietly = TRUE) && rmarkdown::pandoc_available()) {
+  rds_path <- normalizePath(file.path(CONFIG$output_dir, "pipeline.rds"))
+  out_dir  <- normalizePath(CONFIG$output_dir)
+  rmarkdown::render("report/rapport_charge.Rmd",
+                    output_dir = out_dir, quiet = TRUE,
+                    params = list(results = rds_path))
+  message("   -> ", file.path(CONFIG$output_dir, "rapport_charge.html"))
+} else {
+  message("   Pandoc introuvable : rapport non généré.",
+          "\n   -> Installe RStudio (posit.co/download/rstudio-desktop) ou Pandoc",
+          "\n      (github.com/jgm/pandoc/releases, fichier arm64 .pkg), puis relance.",
+          "\n   Les tables et figures sont déjà dans outputs/.")
+}
+message("Terminé.")
