@@ -60,9 +60,30 @@ load_daily <- function(dir = CONFIG$data_dir, vars = DAILY_VARS) {
   found <- found[lengths(found) > 0]
   message("  ", length(found), " variables journalières chargées (",
           sum(lengths(found)), " fichiers)")
-  imap_dfr(found, function(paths, v) map_dfr(paths, read_wide_variable, variable = v)) |>
-    mutate(team = str_extract(player, "^Team[A-Za-z]") |> coalesce("Inconnue")) |>
-    relocate(team, .after = player)
+  long <- imap_dfr(found, function(paths, v) map_dfr(paths, read_wide_variable, variable = v))
+  labels <- make_player_labels(long)
+  long |>
+    left_join(labels, by = "player") |>
+    relocate(team, label, .after = player)
+}
+
+#' Noms d'affichage lisibles : "Équipe A" et joueuses "A-01", "A-02"...
+#' Numérotation dans l'ordre d'arrivée (premier jour avec une charge > 0), puis
+#' par identifiant. L'identifiant SoccerMon d'origine reste dans la colonne
+#' `player` et la correspondance est exportée (correspondance_joueuses.csv).
+make_player_labels <- function(long) {
+  long |>
+    distinct(player) |>
+    mutate(team_code = str_match(player, "^Team([A-Za-z])")[, 2] |> coalesce("X")) |>
+    left_join(long |>
+                filter(variable == "daily_load", !is.na(value), value > 0) |>
+                group_by(player) |> summarise(first_day = min(date), .groups = "drop"),
+              by = "player") |>
+    arrange(team_code, first_day, player) |>
+    group_by(team_code) |>
+    mutate(label = sprintf("%s-%02d", team_code, row_number())) |>
+    ungroup() |>
+    transmute(player, team = paste("Équipe", team_code), label)
 }
 
 #' Convertit un horodatage dont le format n'est pas connu à l'avance :
@@ -116,7 +137,7 @@ load_injuries <- function(dir = CONFIG$data_dir) {
 #' Format "une ligne par joueuse et par jour"
 to_wide <- function(daily_long) {
   daily_long |>
-    select(player, team, date, variable, value) |>
+    select(player, team, label, date, variable, value) |>
     pivot_wider(names_from = variable, values_from = value,
                 values_fn = ~ mean(.x, na.rm = TRUE)) |>   # doublons éventuels
     mutate(across(where(is.numeric), ~ ifelse(is.nan(.x), NA_real_, .x))) |>

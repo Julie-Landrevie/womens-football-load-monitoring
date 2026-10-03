@@ -87,7 +87,7 @@ if (!is.null(R$consistency) && nrow(R$consistency) > 0) {
 last_state <- m |>
   group_by(player) |> filter(date == max(date[load_reported | !is.na(wellness_z)], na.rm = TRUE)) |>
   ungroup() |>
-  transmute(Équipe = team, Joueuse = short_id(player), Date = format(date, "%d/%m/%Y"),
+  transmute(Équipe = team, Joueuse = label, Date = format(date, "%d/%m/%Y"),
             `Charge 7 j (UA)` = round(weekly_load_calc),
             `ACWR (EWMA)` = round(acwr_ewma, 2),
             `Wellness (z)` = round(wellness_z, 1),
@@ -132,7 +132,7 @@ Exemple sur la joueuse la mieux renseignée de chaque équipe. Toute joueuse peu
 
 ```{r fig.height=6.5, results='asis'}
 for (pl in R$example_players) {
-  cat("\n\n### ", short_id(pl), "\n\n")
+  cat("\n\n### Joueuse ", player_label(m, pl), "\n\n")
   print(fig_player_load(m, pl))
   print(fig_player_wellness(m, pl, R$injuries))
 }

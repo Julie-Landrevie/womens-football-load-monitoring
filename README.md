@@ -8,6 +8,8 @@ L'objectif est de reproduire le travail quotidien d'un sport scientist :
 **vérifier la donnée → calculer les indicateurs → les rendre lisibles pour le staff →
 poser une question de recherche appliquée.**
 
+**[Ouvrir le tableau de bord interactif](https://julie-landrevie.github.io/womens-football-load-monitoring/)** : vue équipe, suivi individuel, qualité des données et piste de recherche, avec filtres par équipe et par période.
+
 ![Suivi de charge d'une joueuse](docs/figures/suivi_joueuse.png)
 
 ## Résultats sur SoccerMon (50 joueuses, 2 équipes, 2020–2021)
@@ -53,6 +55,7 @@ conclusion causale (voir *Limites*).
 | Indicateurs | sRPE, charge aiguë/chronique (glissante et EWMA), ACWR, monotonie, strain, wellness en z-score individuel, points d'attention | `R/03_load_metrics.R` |
 | Visualisation | vue qualité, vue équipe (charge hebdomadaire), vue joueuse (charge + ACWR, wellness), profil pré-blessure | `R/04_figures.R` |
 | Rapport | rapport HTML autonome à destination du staff | `report/rapport_charge.Rmd` |
+| Tableau de bord | export des données (`docs/data.js`) pour la page web interactive `docs/index.html`, publiée avec GitHub Pages | `R/05_dashboard.R` |
 
 Tous les seuils (fenêtres, zone d'ACWR, monotonie, seuil wellness, couverture
 minimale) sont réglables dans `R/00_config.R`.
@@ -97,7 +100,12 @@ Rscript run_pipeline.R
 # ou avec un autre dossier de données :
 SOCCERMON_DIR=/chemin/vers/soccermon Rscript run_pipeline.R
 ```
-Sorties : `outputs/rapport_charge.html`, `outputs/figures/`, `outputs/tables/`.
+Sorties : `outputs/rapport_charge.html`, `outputs/figures/`, `outputs/tables/`, et le
+tableau de bord dans `docs/` (ouvrir `docs/index.html` dans un navigateur).
+
+Les joueuses apparaissent sous des noms courts (A-01, B-01…) attribués par ordre
+d'arrivée dans les données ; la correspondance avec les identifiants SoccerMon est
+dans `outputs/tables/correspondance_joueuses.csv`.
 
 ### Tester sans les données
 ```bash
@@ -114,7 +122,6 @@ uniquement à vérifier que le code tourne.
   sans blessure, avec un modèle mixte (effet aléatoire joueuse).
 - Charge **externe** (GPS STATSports 10 Hz) : extension prévue (distance totale,
   haute intensité, accélérations), puis croisement charge interne / charge externe.
-- Tableau de bord interactif (Shiny ou Power BI) à partir des tables exportées.
 
 ## Références
 

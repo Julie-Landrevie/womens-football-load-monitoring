@@ -49,7 +49,7 @@ safe_div <- function(a, b) ifelse(!is.na(b) & b > 0, a / b, NA_real_)
 # les mois "remplis de zéros" avant l'arrivée ou après le départ d'une joueuse.
 complete_calendar <- function(wide) {
   wide |>
-    group_by(player, team) |>
+    group_by(player, team, label) |>
     complete(date = seq(min(date), max(date), by = "day")) |>
     filter(any(coalesce(daily_load, 0) > 0)) |>
     filter(date >= min(date[coalesce(daily_load, 0) > 0]),
@@ -146,7 +146,7 @@ compute_flags <- function(metrics, cfg = CONFIG) {
 weekly_summary <- function(metrics) {
   metrics |>
     mutate(week = as.Date(cut(date, "week", start.on.monday = TRUE))) |>
-    group_by(team, player, week) |>
+    group_by(team, player, label, week) |>
     summarise(
       weekly_load   = sum(load),
       days_reported = sum(load_reported),

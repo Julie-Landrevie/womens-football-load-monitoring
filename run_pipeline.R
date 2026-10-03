@@ -46,7 +46,7 @@ inj_win     <- injury_windows(metrics, injuries)
 
 alerts <- metrics |>
   filter(n_flags > 0) |>
-  transmute(team, player, date,
+  transmute(team, joueuse = label, player, date,
             acwr_ewma = round(acwr_ewma, 2), monotony = round(monotony_calc, 2),
             wellness_z = round(wellness_z, 2),
             motifs = paste0(
@@ -56,6 +56,8 @@ alerts <- metrics |>
               ifelse(flag_wellness,  "wellness en baisse; ", "")) |> sub("; $", "", x = _))
 
 message("4/5 Export des tables et figures")
+write_csv(distinct(daily_long, label, team, player) |> arrange(label) |> rename(identifiant_soccermon = player),
+          file.path(out_tab, "correspondance_joueuses.csv"))
 write_csv(summary_qc,   file.path(out_tab, "qc_synthese.csv"))
 write_csv(completeness, file.path(out_tab, "qc_completude.csv"))
 write_csv(out_of_range, file.path(out_tab, "qc_valeurs_suspectes.csv"))
@@ -69,15 +71,15 @@ save_fig <- function(p, name, w = 9, h = 6) {
 }
 save_fig(fig_qc_completeness(completeness), "01_qc_completude.png", h = 10)
 for (tm in sort(unique(weekly$team))) {
-  save_fig(fig_team_weekly(weekly, tm), paste0("02_equipe_", tm, ".png"), w = 11, h = 7)
+  save_fig(fig_team_weekly(weekly, tm), paste0("02_equipe_", sub("^.* ", "", tm), ".png"), w = 11, h = 7)
 }
 # Joueuses d'exemple : celles avec la meilleure couverture de charge
 example_players <- completeness |>
   filter(variable == "daily_load (> 0)") |>
   group_by(team) |> slice_max(completeness, n = 1, with_ties = FALSE) |> pull(player)
 for (pl in example_players) {
-  save_fig(fig_player_load(metrics, pl), paste0("03_charge_", short_id(pl), ".png"), h = 6.5)
-  save_fig(fig_player_wellness(metrics, pl, injuries), paste0("04_wellness_", short_id(pl), ".png"), h = 4.5)
+  save_fig(fig_player_load(metrics, pl), paste0("03_charge_", player_label(metrics, pl), ".png"), h = 6.5)
+  save_fig(fig_player_wellness(metrics, pl, injuries), paste0("04_wellness_", player_label(metrics, pl), ".png"), h = 4.5)
 }
 save_fig(fig_injury_profile(inj_win), "05_profil_pre_blessure.png", h = 4.5)
 
@@ -88,6 +90,18 @@ saveRDS(list(daily_long = daily_long, injuries = injuries, metrics = metrics,
              inj_win = inj_win, example_players = example_players,
              config = CONFIG, data_dir = CONFIG$data_dir),
         file.path(CONFIG$output_dir, "pipeline.rds"))
+
+# Figures du README (docs/figures), régénérées à chaque exécution
+dir.create("docs/figures", recursive = TRUE, showWarnings = FALSE)
+save_doc <- function(p, name, w, h) if (!is.null(p)) ggsave(file.path("docs/figures", name), p, width = w, height = h, dpi = 150, bg = "white")
+save_doc(fig_player_load(metrics, example_players[1]), "suivi_joueuse.png", 9, 6.5)
+save_doc(fig_team_weekly(weekly, sort(unique(weekly$team))[1]), "charge_hebdo_equipe.png", 11, 7)
+save_doc(fig_injury_profile(inj_win), "profil_pre_blessure.png", 9, 4.5)
+save_doc(fig_qc_completeness(completeness), "qc_completude.png", 9, 10)
+
+message("   Tableau de bord web")
+export_dashboard(readRDS(file.path(CONFIG$output_dir, "pipeline.rds")), out_dir = "docs",
+                 gps = if (exists("gps_daily")) gps_daily else NULL)
 
 message("5/5 Rapport HTML")
 # Pandoc : si absent du PATH, on le cherche dans RStudio / Homebrew

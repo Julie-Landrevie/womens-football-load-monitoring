@@ -32,7 +32,7 @@ qc_completeness <- function(daily_long, vars = c("daily_load", WELLNESS_VARS)) {
     filter(variable %in% vars) |>
     inner_join(per, by = "player") |>
     filter(date >= first_day, date <= last_day) |>
-    group_by(team, player, variable) |>
+    group_by(team, player, label, variable) |>
     summarise(days = n_distinct(date),
               reported = n_distinct(date[is_real_value(variable, value)]),
               completeness = reported / days, .groups = "drop") |>
@@ -47,7 +47,7 @@ qc_zero_runs <- function(daily_long, min_run = 14) {
     inner_join(per, by = "player") |>
     filter(date >= first_day, date <= last_day) |>
     arrange(player, date) |>
-    group_by(team, player) |>
+    group_by(team, player, label) |>
     summarise(
       zero_share  = mean(is.na(value) | value <= 0),
       longest_run = { r <- rle(is.na(value) | value <= 0); max(c(0, r$lengths[r$values])) },
@@ -63,7 +63,7 @@ qc_out_of_range <- function(daily_long, ranges = CONFIG$valid_ranges) {
     inner_join(bounds, by = "variable") |>
     filter(non_numeric | (!is.na(value) & (value < min_ok | value > max_ok))) |>
     mutate(issue = if_else(non_numeric, "valeur non numérique", "hors bornes")) |>
-    select(team, player, date, variable, value, min_ok, max_ok, issue)
+    select(team, label, player, date, variable, value, min_ok, max_ok, issue)
 }
 
 #' Nettoyage : les valeurs suspectes sont mises à NA (jamais corrigées ni

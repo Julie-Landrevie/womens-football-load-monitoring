@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suivi de charge — football féminin</title>
+<meta name="description" content="Tableau de bord de suivi de la charge interne, externe et du wellness de joueuses de football d'élite (données ouvertes SoccerMon).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #eef1ef; --surface: #ffffff; --ink: #15212a; --ink-2: #4e5b65; --ink-3: #7b8790;
+  --line: #d6ddd9; --pitch: #1e5b45; --pitch-soft: #e1ece6; --zone: #e8ecea;
+  --s-blue: #2a78d6; --s-blue-light: #9ec5f4; --s-orange: #eb6834; --s-aqua: #1baf7a;
+  --alert: #d03b3b; --serious: #ec835a; --warning: #c98500; --good: #0ca30c;
+  --seq-0: #cde2fb; --seq-1: #86b6ef; --seq-2: #3987e5; --seq-3: #1c5cab; --seq-4: #0d366b;
+  --empty: #f4f6f5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11181c; --surface: #182126; --ink: #ecf1ee; --ink-2: #a8b4ae; --ink-3: #7f8b86;
+    --line: #2a373d; --pitch: #63c096; --pitch-soft: #1d3029; --zone: #22303a;
+    --s-blue: #3987e5; --s-blue-light: #2a5c95; --s-orange: #d95926; --s-aqua: #199e70;
+    --alert: #e66767; --serious: #ec835a; --warning: #fab219; --good: #3cc23c;
+    --seq-0: #184f95; --seq-1: #256abf; --seq-2: #3987e5; --seq-3: #6da7ec; --seq-4: #b7d3f6;
+    --empty: #1f2a30;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11181c; --surface: #182126; --ink: #ecf1ee; --ink-2: #a8b4ae; --ink-3: #7f8b86;
+  --line: #2a373d; --pitch: #63c096; --pitch-soft: #1d3029; --zone: #22303a;
+  --s-blue: #3987e5; --s-blue-light: #2a5c95; --s-orange: #d95926; --s-aqua: #199e70;
+  --alert: #e66767; --serious: #ec835a; --warning: #fab219; --good: #3cc23c;
+  --seq-0: #184f95; --seq-1: #256abf; --seq-2: #3987e5; --seq-3: #6da7ec; --seq-4: #b7d3f6;
+  --empty: #1f2a30;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 16px/1.5 "Barlow", system-ui, sans-serif;
+}
+h1, h2, h3, .num, .tab { font-family: "Barlow Semi Condensed", "Barlow", sans-serif; }
+a { color: var(--pitch); }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--pitch); outline-offset: 2px; }
+
+/* --- en-tête ------------------------------------------------------------ */
+.top {
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 10;
+}
+.top-inner { max-width: 1240px; margin: 0 auto; padding: 14px 20px 0; }
+.title-row { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; justify-content: space-between; }
+h1 { font-size: 1.6rem; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+h1 small { font: 500 0.95rem/1.3 "Barlow", sans-serif; color: var(--ink-2); margin-left: 8px; letter-spacing: 0; }
+.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.filters label { font-size: 0.85rem; color: var(--ink-2); display: flex; gap: 6px; align-items: center; }
+select, input[type="date"] {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  padding: 5px 8px; min-height: 34px;
+}
+.tabs { display: flex; gap: 2px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+.tab {
+  border: 0; background: none; padding: 10px 14px; font-size: 1.05rem; font-weight: 600;
+  color: var(--ink-2); border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap;
+}
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--pitch); }
+.tab:hover { color: var(--ink); }
+
+/* --- contenu ------------------------------------------------------------ */
+main { max-width: 1240px; margin: 0 auto; padding: 22px 20px 60px; }
+[hidden] { display: none !important; }
+.lede { color: var(--ink-2); max-width: 75ch; margin: 0 0 18px; }
+h2 { font-size: 1.3rem; font-weight: 600; margin: 30px 0 4px; }
+h2 + .hint { margin-top: 0; }
+.hint { color: var(--ink-2); font-size: 0.92rem; margin: 2px 0 12px; max-width: 80ch; }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.kpi { padding: 14px 18px; border-left: 1px solid var(--line); }
+.kpi:first-child { border-left: 0; }
+.kpi .num { font-size: 2rem; font-weight: 600; line-height: 1.1; display: block; }
+.kpi .lbl { color: var(--ink-2); font-size: 0.9rem; }
+.kpi .sub { color: var(--ink-3); font-size: 0.82rem; display: block; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.chart { width: 100%; }
+
+/* tableau d'état */
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 600; color: var(--ink-2); font-size: 0.85rem; background: var(--surface); position: sticky; top: 0; }
+th button { all: unset; cursor: pointer; }
+th button:focus-visible { outline: 2px solid var(--pitch); }
+th[aria-sort="ascending"] button::after { content: " ▲"; font-size: 0.7em; }
+th[aria-sort="descending"] button::after { content: " ▼"; font-size: 0.7em; }
+td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--pitch-soft); }
+tbody tr:last-child td { border-bottom: 0; }
+.player-name { font-family: "Barlow Semi Condensed", sans-serif; font-weight: 600; font-size: 1.05rem; }
+.muted { color: var(--ink-3); }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 0.82rem; padding: 1px 8px 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink); background: var(--surface); }
+.chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.chip.high i { background: var(--alert); }
+.chip.low i { background: var(--serious); }
+.chip.mono i { background: var(--warning); }
+.chip.well i { background: var(--s-blue); }
+.chip.ok { color: var(--ink-3); border-style: dashed; }
+
+/* vue joueuse */
+.player-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.player-bar .big { font-family: "Barlow Semi Condensed", sans-serif; font-size: 2.2rem; font-weight: 700; line-height: 1; margin-right: 6px; }
+.icon-btn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; min-width: 34px; height: 34px; cursor: pointer; }
+.icon-btn:hover { border-color: var(--ink-3); }
+.charts-stack { display: grid; gap: 14px; }
+.chart-title { font: 600 1.02rem/1.3 "Barlow Semi Condensed", sans-serif; margin: 6px 6px 0; }
+.chart-sub { color: var(--ink-2); font-size: 0.85rem; margin: 0 6px; }
+.legend-inline { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.85rem; color: var(--ink-2); margin: 4px 6px 0; }
+.legend-inline span { display: inline-flex; gap: 6px; align-items: center; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.bar { height: 10px; width: 10px; border-radius: 2px; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.sw.zone { height: 10px; width: 14px; border-radius: 2px; background: var(--zone); border: 1px solid var(--line); }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.prose { max-width: 75ch; }
+.prose h3 { font-size: 1.1rem; margin: 22px 0 4px; }
+.prose p, .prose li { color: var(--ink); }
+.prose dt { font-weight: 600; margin-top: 10px; }
+.prose dd { margin: 2px 0 0; color: var(--ink-2); }
+.note { border-left: 3px solid var(--pitch); padding: 6px 12px; background: var(--pitch-soft); border-radius: 0 6px 6px 0; max-width: 80ch; }
+.empty { padding: 40px; text-align: center; color: var(--ink-2); }
+footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--ink-3); font-size: 0.85rem; }
+.theme-toggle { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; height: 34px; padding: 0 10px; cursor: pointer; }
+
+@media (max-width: 760px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi:nth-child(3) { border-left: 0; }
+  .kpi:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .two-col { grid-template-columns: 1fr; }
+  h1 { font-size: 1.3rem; }
+  h1 small { display: block; margin: 2px 0 0; }
+  .top-inner, main, footer { padding-left: 16px; padding-right: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="title-row">
+      <h1>Suivi de charge <small>Football féminin d'élite, données ouvertes SoccerMon</small></h1>
+      <div class="filters">
+        <label>Équipe <select id="f-team"></select></label>
+        <label>Période <select id="f-period">
+          <option value="all">Toute la période</option>
+          <option value="2020">Saison 2020</option>
+          <option value="2021">Saison 2021</option>
+          <option value="custom">Personnalisée…</option>
+        </select></label>
+        <span id="custom-dates" hidden>
+          <input type="date" id="f-from" aria-label="Du"> <input type="date" id="f-to" aria-label="Au">
+        </span>
+        <button class="theme-toggle" id="theme" type="button" aria-label="Changer de thème">Thème</button>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" data-view="team" aria-selected="true">Équipe</button>
+      <button class="tab" role="tab" data-view="player" aria-selected="false">Joueuse</button>
+      <button class="tab" role="tab" data-view="quality" aria-selected="false">Qualité des données</button>
+      <button class="tab" role="tab" data-view="research" aria-selected="false">Recherche</button>
+      <button class="tab" role="tab" data-view="method" aria-selected="false">Méthode</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ÉQUIPE -->
+  <section class="view" id="view-team">
+    <div class="kpis" id="team-kpis"></div>
+
+    <h2>État en fin de période</h2>
+    <p class="hint" id="team-state-hint">Dernières valeurs connues de chaque joueuse. Cliquez sur une ligne pour ouvrir son suivi.</p>
+    <div class="table-wrap"><table id="state-table"></table></div>
+
+    <h2>Charge hebdomadaire</h2>
+    <p class="hint">sRPE cumulée par semaine. Case vide : aucun jour documenté. Cliquez sur une case pour ouvrir la joueuse.</p>
+    <div class="panel"><div id="team-heatmap" class="chart"></div></div>
+  </section>
+
+  <!-- JOUEUSE -->
+  <section class="view" id="view-player" hidden>
+    <div class="player-bar">
+      <button class="icon-btn" id="prev-player" type="button" aria-label="Joueuse précédente">‹</button>
+      <span class="big" id="player-name">—</span>
+      <button class="icon-btn" id="next-player" type="button" aria-label="Joueuse suivante">›</button>
+      <label class="muted">Choisir <select id="f-player"></select></label>
+    </div>
+    <div class="kpis" id="player-kpis"></div>
+
+    <div class="charts-stack" style="margin-top:16px">
+      <div class="panel">
+        <p class="chart-title">Charge interne</p>
+        <div class="legend-inline">
+          <span><i class="sw bar" style="background:var(--s-blue-light)"></i>Charge du jour (sRPE)</span>
+          <span><i class="sw" style="background:var(--s-blue)"></i>Aiguë, EWMA 7 j</span>
+          <span><i class="sw" style="background:var(--s-orange)"></i>Chronique, EWMA 28 j</span>
+        </div>
+        <div id="p-load" class="chart"></div>
+      </div>
+      <div class="panel">
+        <p class="chart-title">Rapport aigu / chronique (ACWR)</p>
+        <div class="legend-inline">
+          <span><i class="sw zone"></i>Zone de référence</span>
+          <span><i class="sw dot" style="background:var(--alert)"></i>Hors zone alors que l'équipe y reste</span>
+          <span class="muted">Courbe masquée quand moins de 70 % des 28 derniers jours sont documentés</span>
+        </div>
+        <div id="p-acwr" class="chart"></div>
+      </div>
+      <div class="panel">
+        <p class="chart-title">Wellness individuel</p>
+        <p class="chart-sub">Écart à la normale de la joueuse (28 jours précédents). Sous 0 : moins bien que d'habitude.</p>
+        <div class="legend-inline">
+          <span><i class="sw" style="background:var(--s-blue)"></i>Score composite (z)</span>
+          <span><i class="sw" style="background:var(--alert)"></i>Seuil d'attention</span>
+          <span><i class="sw" style="background:var(--ink-3)"></i>Blessure déclarée</span>
+        </div>
+        <div id="p-well" class="chart"></div>
+      </div>
+      <div class="two-col" id="gps-block" hidden>
+        <div class="panel">
+          <p class="chart-title">Charge externe : distance totale</p>
+          <p class="chart-sub">GPS STATSports, km par jour.</p>
+          <div id="p-gps-dist" class="chart"></div>
+        </div>
+        <div class="panel">
+          <p class="chart-title">Charge externe : haute intensité</p>
+          <div class="legend-inline">
+            <span><i class="sw" style="background:var(--s-blue)"></i>Course rapide (&gt; 16 km/h), m</span>
+            <span><i class="sw" style="background:var(--s-orange)"></i>Sprint (&gt; 20 km/h), m</span>
+          </div>
+          <div id="p-gps-hsr" class="chart"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUALITÉ -->
+  <section class="view" id="view-quality" hidden>
+    <p class="lede">Avant d'interpréter un indicateur, on vérifie que la donnée qui le porte est fiable. Cette page résume ce contrôle.</p>
+    <div class="two-col">
+      <div>
+        <h2 style="margin-top:0">Synthèse</h2>
+        <div class="table-wrap"><table id="qc-table"></table></div>
+      </div>
+      <div>
+        <h2 style="margin-top:0">Ce qu'il faut savoir</h2>
+        <div class="prose" id="qc-notes"></div>
+      </div>
+    </div>
+    <h2>Complétude par joueuse</h2>
+    <p class="hint">Part des jours renseignés sur la période active de chaque joueuse (pour la charge : jours avec une charge &gt; 0).</p>
+    <div class="panel"><div id="qc-heatmap" class="chart"></div></div>
+  </section>
+
+  <!-- RECHERCHE -->
+  <section class="view" id="view-research" hidden>
+    <div class="prose">
+      <p class="lede"><strong>Question :</strong> les jours qui précèdent une blessure déclarée se distinguent-ils par une évolution de la charge ou de l'état de forme, par rapport à la normale de chaque joueuse ?</p>
+    </div>
+    <div class="two-col">
+      <div class="panel"><p class="chart-title">ACWR (EWMA)</p><p class="chart-sub">Médiane et intervalle interquartile</p><div id="r-acwr" class="chart"></div></div>
+      <div class="panel"><p class="chart-title">Wellness (z-score)</p><p class="chart-sub">Médiane et intervalle interquartile</p><div id="r-well" class="chart"></div></div>
+    </div>
+    <div class="prose" id="research-text"></div>
+  </section>
+
+  <!-- MÉTHODE -->
+  <section class="view prose" id="view-method" hidden>
+    <p class="lede">Ce tableau de bord est produit par un pipeline R ouvert : <a href="https://github.com/Julie-Landrevie/womens-football-load-monitoring">code source sur GitHub</a>.</p>
+    <h3>Données</h3>
+    <p>SoccerMon : deux équipes féminines de première division norvégienne, saisons 2020 et 2021. Questionnaires quotidiens (charge perçue, wellness, blessures) via l'application PMSys, et GPS STATSports à 10 Hz. Licence CC BY 4.0. Les joueuses sont anonymisées ; les noms A-01, B-01… sont attribués par ordre d'arrivée dans les données.</p>
+    <h3>Indicateurs</h3>
+    <dl>
+      <dt>Charge du jour (sRPE)</dt><dd>Effort perçu (1 à 10) × durée de la séance en minutes, cumulé sur la journée. En unités arbitraires (UA).</dd>
+      <dt>Charge aiguë et chronique</dt><dd>Moyennes exponentielles sur 7 et 28 jours (EWMA) : elles donnent plus de poids aux jours récents qu'une moyenne simple.</dd>
+      <dt>ACWR</dt><dd>Aiguë ÷ chronique. Autour de 1 : charge habituelle. La zone 0,8–1,5 sert de repère de progressivité, pas de prédicteur de blessure (débat ouvert dans la littérature).</dd>
+      <dt>Monotonie</dt><dd>Moyenne ÷ écart-type de la charge sur 7 jours. Au-dessus de 2 : peu de variation d'un jour à l'autre.</dd>
+      <dt>Wellness</dt><dd>Fatigue, humeur, disponibilité, sommeil, douleurs et stress, chacun comparé aux 28 jours précédents de la même joueuse (z-score), puis moyennés.</dd>
+    </dl>
+    <h3>Règles d'alerte</h3>
+    <ul>
+      <li>Aucune alerte de charge si moins de 70 % des 28 derniers jours sont documentés (charge &gt; 0 ou wellness rempli).</li>
+      <li>Une alerte d'ACWR n'est émise que si la joueuse sort de la zone alors que la médiane de son équipe y reste : une coupure ou une reprise collective n'est pas un signal individuel.</li>
+      <li>Wellness : alerte sous −1,5 écart-type par rapport à la normale de la joueuse.</li>
+    </ul>
+    <h3>Limites</h3>
+    <ul>
+      <li>Dans SoccerMon, un jour sans déclaration de charge vaut 0 : un repos et un oubli sont indiscernables.</li>
+      <li>Les blessures sont auto-déclarées (douleur mineure ou majeure), sans diagnostic médical.</li>
+      <li>Les seuils sont des repères réglables, à valider avec le staff.</li>
+    </ul>
+  </section>
+</main>
+<footer id="footer">Julie Landrevie — tableau de bord généré à partir du pipeline R du dépôt.</footer>
+
+<script src="data.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-cartesian-dist-min@2.35.2/plotly-cartesian.min.js"></script>
+<script>
+(function () {
+"use strict";
+const D = window.DASHBOARD_DATA;
+const $ = (s) => document.querySelector(s);
+if (!D) {
+  $("main").innerHTML = '<p class="empty">Données introuvables. Lancez <code>Rscript run_pipeline.R</code> pour générer <code>docs/data.js</code>.</p>';
+  return;
+}
+if (!window.Plotly) {
+  $("main").insertAdjacentHTML("afterbegin", '<p class="note">Les graphiques n\'ont pas pu être chargés (connexion à Internet requise pour la librairie Plotly).</p>');
+}
+
+/* ---------- utilitaires ---------- */
+const DAY = 86400000;
+const toDate = (s) => new Date(s + "T00:00:00Z");
+const iso = (d) => d.toISOString().slice(0, 10);
+const addDays = (s, n) => iso(new Date(toDate(s).getTime() + n * DAY));
+const diffDays = (a, b) => Math.round((toDate(b) - toDate(a)) / DAY);
+const MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+const frDate = (s) => { const d = toDate(s); return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear(); };
+const nf = (x, d = 0) => (x == null || isNaN(x)) ? "—" : x.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (x) => (x == null || isNaN(x)) ? "—" : Math.round(x * 100) + " %";
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const mondayOf = (s) => { const d = toDate(s); const wd = (d.getUTCDay() + 6) % 7; return addDays(s, -wd); };
+const median = (a) => { const v = a.filter((x) => x != null).sort((x, y) => x - y); if (!v.length) return null; const m = Math.floor(v.length / 2); return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
+const T = D.meta.thresholds;
+
+// joueuses : passage du format colonnes au format objets
+const P = D.players.id.map((id, i) => ({
+  id, team: D.players.team[i], first: D.players.first[i], last: D.players.last[i],
+  loadShare: D.players.load_share[i], wellShare: D.players.wellness_share[i]
+}));
+const byId = Object.fromEntries(P.map((p) => [p.id, p]));
+const allFirst = P.map((p) => p.first).sort()[0];
+const allLast = P.map((p) => p.last).sort().slice(-1)[0];
+
+if (window.Plotly) {
+  Plotly.register({ moduleType: "locale", name: "fr", dictionary: {},
+    format: { days: ["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"],
+      shortDays: ["dim.","lun.","mar.","mer.","jeu.","ven.","sam."],
+      months: ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"],
+      shortMonths: MONTHS, date: "%d/%m/%Y", decimal: ",", thousands: " " } });
+}
+const PCONF = { displayModeBar: false, responsive: true, locale: "fr" };
+function baseLayout(extra) {
+  const ink2 = css("--ink-2"), line = css("--line");
+  return Object.assign({
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Barlow, system-ui, sans-serif", color: ink2, size: 13 },
+    margin: { l: 52, r: 14, t: 10, b: 34 }, showlegend: false,
+    xaxis: { type: "date", gridcolor: line, linecolor: line, zeroline: false, tickformat: "%b %Y", hoverformat: "%d %b %Y" },
+    yaxis: { gridcolor: line, linecolor: line, zeroline: false },
+    hoverlabel: { bgcolor: css("--surface"), bordercolor: line, font: { color: css("--ink"), family: "Barlow, sans-serif" } },
+    hovermode: "x unified"
+  }, extra || {});
+}
+const plot = (el, data, layout) => { if (window.Plotly) Plotly.react(el, data, layout, PCONF); };
+
+/* ---------- état ---------- */
+const state = { team: D.teams[0], from: allFirst, to: allLast, player: null, view: "team", sort: { key: "alerts", dir: -1 } };
+
+// indice d'une date dans la série d'une joueuse
+function range(id) {
+  const s = D.series[id]; const n = s.load.length;
+  const i0 = Math.max(0, diffDays(s.start, state.from));
+  const i1 = Math.min(n - 1, diffDays(s.start, state.to));
+  return i0 > i1 ? null : [i0, i1];
+}
+const teamPlayers = () => P.filter((p) => p.team === state.team && range(p.id));
+
+function flagChips(f, empty) {
+  const out = [];
+  if (f & 1) out.push('<span class="chip high"><i></i>Hausse rapide</span>');
+  if (f & 2) out.push('<span class="chip low"><i></i>Sous-charge</span>');
+  if (f & 4) out.push('<span class="chip mono"><i></i>Monotonie</span>');
+  if (f & 8) out.push('<span class="chip well"><i></i>Wellness en baisse</span>');
+  return out.length ? '<span class="chips">' + out.join("") + "</span>" : (empty || '<span class="chip ok">RAS</span>');
+}
+
+// résumé d'une joueuse à la fin de la période
+function endState(id) {
+  const s = D.series[id], r = range(id); if (!r) return null;
+  let [i0, i1] = r;
+  // dernier jour documenté de la période
+  let k = i1; while (k > i0 && !s.doc[k]) k--;
+  let load7 = 0; for (let j = Math.max(0, k - 6); j <= k; j++) load7 += s.load[j] || 0;
+  let well = null; for (let j = k; j >= Math.max(i0, k - 6); j--) if (s.well[j] != null) { well = s.well[j]; break; }
+  let flags7 = 0; for (let j = Math.max(i0, k - 6); j <= k; j++) flags7 |= s.flags[j];
+  let alerts = 0, docd = 0; for (let j = i0; j <= i1; j++) { if (s.flags[j]) alerts++; if (s.doc[j]) docd++; }
+  return { date: addDays(s.start, k), load7, acwr: s.acwr[k], acwrRaw: s.acwr_raw[k], well, cov: s.cov[k],
+           flags7, alerts, docShare: docd / (i1 - i0 + 1), days: i1 - i0 + 1 };
+}
+
+/* ---------- vue équipe ---------- */
+function renderTeam() {
+  const ps = teamPlayers();
+  const rows = ps.map((p) => Object.assign({ id: p.id }, endState(p.id)));
+
+  // KPI
+  const weekly = weeklyMatrix(ps);
+  const lastWeekIdx = weekly.weeks.length - 1;
+  const lastWeekVals = weekly.z.map((r) => r[lastWeekIdx]).filter((v) => v != null);
+  const totalAlerts = rows.reduce((a, r) => a + r.alerts, 0);
+  const totalDays = rows.reduce((a, r) => a + r.days, 0);
+  const watch = rows.filter((r) => r.flags7).length;
+  $("#team-kpis").innerHTML = [
+    kpi(ps.length, "joueuses suivies", "sur la période"),
+    kpi(nf(median(lastWeekVals)), "charge hebdo médiane (UA)", lastWeekIdx >= 0 ? "semaine du " + frDate(weekly.weeks[lastWeekIdx]) : ""),
+    kpi(pct(rows.reduce((a, r) => a + r.docShare * r.days, 0) / (totalDays || 1)), "jours documentés", "charge > 0 ou wellness rempli"),
+    kpi(watch, "joueuses à surveiller", "point d'attention sur les 7 derniers jours ; " + pct(totalAlerts / (totalDays || 1)) + " des jours avec alerte")
+  ].join("");
+
+  // tableau
+  const cols = [
+    { key: "id", label: "Joueuse" },
+    { key: "date", label: "Dernier jour", cls: "" },
+    { key: "load7", label: "Charge 7 j (UA)", cls: "r" },
+    { key: "acwr", label: "ACWR", cls: "r" },
+    { key: "well", label: "Wellness (z)", cls: "r" },
+    { key: "cov", label: "Jours documentés (28 j)", cls: "r" },
+    { key: "flags7", label: "Points d'attention (7 j)" },
+    { key: "alerts", label: "Jours avec alerte", cls: "r" }
+  ];
+  const { key, dir } = state.sort;
+  rows.sort((a, b) => {
+    let x = a[key], y = b[key];
+    if (key === "acwr") { x = a.acwr ?? a.acwrRaw; y = b.acwr ?? b.acwrRaw; }
+    if (x == null) return 1; if (y == null) return -1;
+    return (x > y ? 1 : x < y ? -1 : 0) * dir;
+  });
+  const head = "<thead><tr>" + cols.map((c) =>
+    `<th class="${c.cls || ""}" aria-sort="${c.key === key ? (dir > 0 ? "ascending" : "descending") : "none"}"><button data-sort="${c.key}">${c.label}</button></th>`).join("") + "</tr></thead>";
+  const body = "<tbody>" + rows.map((r) => `<tr data-player="${r.id}" tabindex="0">
+      <td><span class="player-name">${r.id}</span></td>
+      <td>${frDate(r.date)}</td>
+      <td class="r">${nf(r.load7)}</td>
+      <td class="r">${r.acwr != null ? nf(r.acwr, 2) : '<span class="muted" title="Couverture insuffisante pour interpréter">' + nf(r.acwrRaw, 2) + "*</span>"}</td>
+      <td class="r">${nf(r.well, 1)}</td>
+      <td class="r">${pct(r.cov)}</td>
+      <td>${flagChips(r.flags7)}</td>
+      <td class="r">${r.alerts}</td></tr>`).join("") + "</tbody>";
+  $("#state-table").innerHTML = head + body;
+  $("#team-state-hint").textContent = "Dernières valeurs connues de chaque joueuse. * ACWR non interprétable (moins de 70 % des 28 derniers jours documentés). Cliquez sur une ligne pour ouvrir le suivi de la joueuse.";
+
+  // carte de chaleur
+  const blues = [[0, css("--seq-0")], [0.25, css("--seq-1")], [0.5, css("--seq-2")], [0.75, css("--seq-3")], [1, css("--seq-4")]];
+  plot("team-heatmap", [{
+    type: "heatmap", x: weekly.weeks, y: weekly.ids, z: weekly.z, colorscale: blues, xgap: 2, ygap: 2,
+    hoverongaps: false, customdata: weekly.docs,
+    hovertemplate: "<b>%{y}</b><br>Semaine du %{x|%d %b %Y}<br>Charge : %{z:,.0f} UA<br>Jours documentés : %{customdata}/7<extra></extra>",
+    colorbar: { title: { text: "UA", side: "top" }, thickness: 10, len: 0.6, outlinewidth: 0, tickfont: { size: 11 } }
+  }], baseLayout({
+    height: Math.max(320, 26 * weekly.ids.length + 70), hovermode: "closest",
+    margin: { l: 56, r: 10, t: 6, b: 34 },
+    yaxis: { autorange: "reversed", type: "category", gridcolor: "rgba(0,0,0,0)", tickfont: { family: "Barlow Semi Condensed", size: 13, color: css("--ink") } },
+    xaxis: { type: "date", tickformat: "%b %Y", gridcolor: "rgba(0,0,0,0)" }
+  }));
+  const hm = document.getElementById("team-heatmap");
+  if (window.Plotly && hm.on && !hm._click) {
+    hm._click = true;
+    hm.on("plotly_click", (ev) => { const p = ev.points && ev.points[0]; if (p) openPlayer(p.y); });
+  }
+}
+function kpi(n, lbl, sub) { return `<div class="kpi"><span class="num">${n}</span><span class="lbl">${lbl}</span>${sub ? `<span class="sub">${sub}</span>` : ""}</div>`; }
+
+function weeklyMatrix(ps) {
+  const w0 = mondayOf(state.from), w1 = mondayOf(state.to);
+  const weeks = []; for (let w = w0; w <= w1; w = addDays(w, 7)) weeks.push(w);
+  const ids = [], z = [], docs = [];
+  ps.forEach((p) => {
+    const s = D.series[p.id]; const r = range(p.id); if (!r) return;
+    const row = new Array(weeks.length).fill(null), drow = new Array(weeks.length).fill(0), sum = new Array(weeks.length).fill(0);
+    for (let j = r[0]; j <= r[1]; j++) {
+      const d = addDays(s.start, j); const wi = Math.round(diffDays(w0, mondayOf(d)) / 7);
+      sum[wi] += s.load[j] || 0; if (s.doc[j]) drow[wi]++;
+    }
+    for (let k = 0; k < weeks.length; k++) row[k] = drow[k] ? sum[k] : null;
+    ids.push(p.id); z.push(row); docs.push(drow);
+  });
+  return { weeks, ids, z, docs };
+}
+
+/* ---------- vue joueuse ---------- */
+function renderPlayer() {
+  const ps = teamPlayers();
+  if (!ps.length) { $("#player-name").textContent = "—"; return; }
+  if (!state.player || !ps.find((p) => p.id === state.player)) state.player = ps[0].id;
+  const id = state.player, s = D.series[id], r = range(id);
+  $("#f-player").innerHTML = ps.map((p) => `<option value="${p.id}" ${p.id === id ? "selected" : ""}>${p.id}</option>`).join("");
+  $("#player-name").textContent = id;
+  const es = endState(id);
+  $("#player-kpis").innerHTML = [
+    kpi(nf(es.load7), "charge 7 j (UA)", "au " + frDate(es.date)),
+    kpi(es.acwr != null ? nf(es.acwr, 2) : nf(es.acwrRaw, 2) + "*", "ACWR", es.acwr != null ? "zone de référence " + nf(T.acwr_low, 1) + "–" + nf(T.acwr_high, 1) : "* non interprétable : peu de jours documentés"),
+    kpi(nf(es.well, 1), "wellness (z)", "0 = sa normale"),
+    kpi(es.alerts, "jours avec alerte", "sur " + es.days + " jours de la période")
+  ].join("");
+
+  const [i0, i1] = r;
+  const dates = [], load = [], acute = [], chronic = [], acwr = [], well = [], fx = [], fy = [], ftxt = [];
+  for (let j = i0; j <= i1; j++) {
+    const d = addDays(s.start, j); dates.push(d);
+    load.push(s.load[j] || null); acute.push(s.acute[j]); chronic.push(s.chronic[j]);
+    acwr.push(s.acwr[j]); well.push(s.well[j]);
+    if (s.flags[j] & 3) { fx.push(d); fy.push(s.acwr[j] ?? s.acwr_raw[j]); ftxt.push(s.flags[j] & 1 ? "Hausse rapide" : "Sous-charge"); }
+  }
+  const xr = [dates[0], dates[dates.length - 1]];
+  const blue = css("--s-blue"), orange = css("--s-orange"), alert = css("--alert");
+
+  plot("p-load", [
+    { type: "bar", x: dates, y: load, name: "Charge du jour", marker: { color: css("--s-blue-light") }, hovertemplate: "%{y:,.0f} UA" },
+    { type: "scatter", mode: "lines", x: dates, y: acute, name: "Aiguë (7 j)", line: { color: blue, width: 2 }, hovertemplate: "%{y:,.0f} UA" },
+    { type: "scatter", mode: "lines", x: dates, y: chronic, name: "Chronique (28 j)", line: { color: orange, width: 2 }, hovertemplate: "%{y:,.0f} UA" }
+  ], baseLayout({ height: 280, bargap: 0.15, xaxis: Object.assign(baseLayout().xaxis, { range: xr }), yaxis: Object.assign(baseLayout().yaxis, { title: { text: "UA" }, rangemode: "tozero" }) }));
+
+  const yMax = Math.max(2, ...acwr.filter((v) => v != null));
+  plot("p-acwr", [
+    { type: "scatter", mode: "lines", x: dates, y: acwr, name: "ACWR", line: { color: css("--ink-2"), width: 1.6 }, connectgaps: false, hovertemplate: "%{y:.2f}" },
+    { type: "scatter", mode: "markers", x: fx, y: fy, text: ftxt, name: "Alerte", marker: { color: alert, size: 8, line: { color: css("--surface"), width: 1.5 } }, hovertemplate: "%{text}" }
+  ], baseLayout({ height: 230,
+    shapes: [{ type: "rect", xref: "paper", x0: 0, x1: 1, y0: T.acwr_low, y1: T.acwr_high, fillcolor: css("--zone"), line: { width: 0 }, layer: "below" }],
+    xaxis: Object.assign(baseLayout().xaxis, { range: xr }), yaxis: Object.assign(baseLayout().yaxis, { range: [0, Math.min(yMax + 0.1, 3.5)] }) }));
+
+  const inj = (D.injuries[id] || []).filter((d) => d >= xr[0] && d <= xr[1]);
+  const wv = well.filter((v) => v != null);
+  const wMin = Math.min(-2.5, ...wv), wMax = Math.max(2, ...wv);
+  plot("p-well", [
+    { type: "scatter", mode: "lines", x: dates, y: well, name: "Wellness", line: { color: blue, width: 1.6 }, connectgaps: false, hovertemplate: "z = %{y:.1f}" },
+    { type: "scatter", mode: "markers", x: inj, y: inj.map(() => wMax), name: "Blessure déclarée", marker: { symbol: "triangle-down", size: 10, color: css("--ink-3") }, hovertemplate: "Blessure déclarée" }
+  ], baseLayout({ height: 220,
+    shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: T.wellness_z, y1: T.wellness_z, line: { color: alert, width: 1.2, dash: "dash" } }]
+      .concat(inj.map((d) => ({ type: "line", x0: d, x1: d, yref: "paper", y0: 0, y1: 1, line: { color: css("--ink-3"), width: 1, dash: "dot" } }))),
+    xaxis: Object.assign(baseLayout().xaxis, { range: xr }), yaxis: Object.assign(baseLayout().yaxis, { range: [wMin - 0.2, wMax + 0.4], zeroline: true, zerolinecolor: css("--ink-3") }) }));
+
+  // GPS
+  const hasGps = D.meta.has_gps && s.gps_km;
+  $("#gps-block").hidden = !hasGps;
+  if (hasGps) {
+    const km = [], hsr = [], spr = [];
+    for (let j = i0; j <= i1; j++) { km.push(s.gps_km[j]); hsr.push(s.gps_hsr[j]); spr.push(s.gps_sprint[j]); }
+    plot("p-gps-dist", [{ type: "bar", x: dates, y: km, marker: { color: css("--s-aqua") }, hovertemplate: "%{y:.1f} km" }],
+      baseLayout({ height: 220, xaxis: Object.assign(baseLayout().xaxis, { range: xr }), yaxis: Object.assign(baseLayout().yaxis, { title: { text: "km" }, rangemode: "tozero" }) }));
+    plot("p-gps-hsr", [
+      { type: "scatter", mode: "markers", x: dates, y: hsr, name: "Course rapide", marker: { color: blue, size: 5 }, hovertemplate: "%{y:,.0f} m" },
+      { type: "scatter", mode: "markers", x: dates, y: spr, name: "Sprint", marker: { color: orange, size: 5 }, hovertemplate: "%{y:,.0f} m" }
+    ], baseLayout({ height: 220, xaxis: Object.assign(baseLayout().xaxis, { range: xr }), yaxis: Object.assign(baseLayout().yaxis, { title: { text: "m" }, rangemode: "tozero" }) }));
+  }
+  syncZoom(["p-load", "p-acwr", "p-well"].concat(hasGps ? ["p-gps-dist", "p-gps-hsr"] : []));
+}
+
+// zoom synchronisé entre les graphiques de la vue joueuse
+function syncZoom(ids) {
+  if (!window.Plotly) return;
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el._synced) return; el._synced = true;
+    el.on("plotly_relayout", (ev) => {
+      if (el._lock) return;
+      const upd = {};
+      if (ev["xaxis.range[0]"]) { upd["xaxis.range"] = [ev["xaxis.range[0]"], ev["xaxis.range[1]"]]; }
+      else if (ev["xaxis.autorange"]) { upd["xaxis.autorange"] = true; }
+      else return;
+      ids.forEach((o) => { if (o === id) return; const e = document.getElementById(o); if (!e.data || e.closest("[hidden]")) return; e._lock = true; Plotly.relayout(e, upd).then(() => { e._lock = false; }); });
+    });
+  });
+}
+
+/* ---------- qualité ---------- */
+function renderQuality() {
+  const q = D.qc.summary;
+  $("#qc-table").innerHTML = "<tbody>" + q.indicateur.map((k, i) => `<tr style="cursor:default"><td>${k}</td><td class="r"><strong>${q.valeur[i]}</strong></td></tr>`).join("") + "</tbody>";
+  const c = D.qc.consistency;
+  $("#qc-notes").innerHTML = `
+    <p>Dans SoccerMon, <strong>un jour sans déclaration de charge vaut 0</strong> : un repos et un questionnaire non rempli sont indiscernables. Chaque joueuse est donc analysée sur sa période active, et un jour n'est « documenté » que s'il a une charge &gt; 0 ou un wellness rempli.</p>
+    ${c ? `<p><strong>Validation.</strong> L'ACWR recalculé reproduit celui fourni par SoccerMon : corrélation ${nf(c.correlation, 2)}, ${pct(c.share_within_0_1 ?? c["share_within_0.1"])} des ${nf(c.n)} jours-joueuses à moins de 0,1 d'écart.</p>` : ""}
+    <p>Les valeurs hors bornes plausibles sont écartées du calcul et listées dans les tables du pipeline, jamais corrigées en silence.</p>`;
+  const comp = D.qc.completeness;
+  const ids = [...new Set(comp.id.filter((_, i) => comp.team[i] === state.team))].sort();
+  const vars = [...new Set(comp.var)];
+  const VAR_FR = { "daily_load (> 0)": "Charge > 0", fatigue: "Fatigue", mood: "Humeur", readiness: "Disponibilité", sleep_quality: "Sommeil", soreness: "Douleurs", stress: "Stress" };
+  const z = ids.map((id) => vars.map((v) => { const i = comp.id.findIndex((x, k) => x === id && comp.var[k] === v); return i >= 0 ? comp.v[i] : null; }));
+  plot("qc-heatmap", [{ type: "heatmap", x: vars.map((v) => VAR_FR[v] || v), y: ids, z, zmin: 0, zmax: 1, xgap: 2, ygap: 2,
+    colorscale: [[0, css("--seq-0")], [0.5, css("--seq-2")], [1, css("--seq-4")]],
+    hovertemplate: "<b>%{y}</b> · %{x}<br>%{z:.0%} des jours<extra></extra>",
+    colorbar: { thickness: 10, len: 0.6, outlinewidth: 0, tickformat: ".0%" } }],
+    baseLayout({ height: Math.max(320, 24 * ids.length + 60), hovermode: "closest", margin: { l: 56, r: 10, t: 6, b: 40 },
+      xaxis: { type: "category", side: "bottom", gridcolor: "rgba(0,0,0,0)" },
+      yaxis: { type: "category", autorange: "reversed", gridcolor: "rgba(0,0,0,0)", tickfont: { family: "Barlow Semi Condensed", color: css("--ink") } } }));
+}
+
+/* ---------- recherche ---------- */
+function renderResearch() {
+  const pr = D.injury_profile;
+  if (!pr) { $("#research-text").innerHTML = '<p class="empty">Aucune déclaration de blessure dans les données chargées.</p>'; return; }
+  const band = (q1, q3, med, color, fmt) => [
+    { type: "scatter", x: pr.d, y: pr[q3], mode: "lines", line: { width: 0 }, hoverinfo: "skip" },
+    { type: "scatter", x: pr.d, y: pr[q1], mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: css("--s-blue-light"), hoverinfo: "skip" },
+    { type: "scatter", x: pr.d, y: pr[med], mode: "lines", line: { color, width: 2.4 }, hovertemplate: "J%{x} : " + fmt + "<extra></extra>" }
+  ];
+  const lay = (extra) => baseLayout(Object.assign({ height: 280, hovermode: "closest",
+    xaxis: { title: { text: "Jours avant la déclaration" }, gridcolor: css("--line"), zeroline: false },
+    shapes: [{ type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: css("--ink-3"), dash: "dot", width: 1 } }] }, extra));
+  plot("r-acwr", band("acwr_q1", "acwr_q3", "acwr_med", css("--s-blue"), "%{y:.2f}"), lay());
+  plot("r-well", band("well_q1", "well_q3", "well_med", css("--s-blue"), "%{y:.2f}"), lay());
+  const a0 = pr.acwr_med[0], a1 = pr.acwr_med[pr.acwr_med.length - 1];
+  const w0 = median(pr.well_med.slice(0, 5)), w1 = median(pr.well_med.slice(-3));
+  const da = a1 - a0, dw = w1 - w0;
+  const acwrTxt = Math.abs(da) < 0.05 ? "reste stable (" + nf(a0, 2) + " → " + nf(a1, 2) + ")"
+    : (da > 0 ? "augmente légèrement" : "diminue légèrement") + ", de " + nf(a0, 2) + " trois semaines avant la déclaration à " + nf(a1, 2) + " le jour même"
+      + (a1 >= T.acwr_low && a1 <= T.acwr_high ? ", tout en restant dans la zone de référence" : "");
+  const wellTxt = dw < -0.3 ? "Le wellness composite baisse dans les derniers jours (" + nf(w0, 2) + " → " + nf(w1, 2) + ") : un signal à confronter à un groupe témoin."
+    : "Le wellness composite ne montre pas de baisse nette (" + nf(w0, 2) + " → " + nf(w1, 2) + ") : dans ces données, le questionnaire de wellness ne semble pas anticiper les plaintes déclarées.";
+  $("#research-text").innerHTML = `
+    <h3>Ce qu'on observe sur ${pr.n} épisodes</h3>
+    <p>L'ACWR médian ${acwrTxt}. ${wellTxt}</p>
+    <h3>Ce que ça ne permet pas de conclure</h3>
+    <ul><li>Les blessures sont auto-déclarées, sans diagnostic : ce sont des plaintes, pas forcément des arrêts.</li>
+    <li>Il n'y a pas de groupe témoin : il faudrait comparer avec des fenêtres de 21 jours sans blessure (modèle mixte avec effet joueuse) avant toute conclusion.</li></ul>`;
+}
+
+/* ---------- navigation et filtres ---------- */
+function show(view) {
+  state.view = view;
+  document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", t.dataset.view === view));
+  document.querySelectorAll(".view").forEach((v) => { v.hidden = v.id !== "view-" + view; });
+  render();
+}
+function render() {
+  if (state.view === "team") renderTeam();
+  if (state.view === "player") renderPlayer();
+  if (state.view === "quality") renderQuality();
+  if (state.view === "research") renderResearch();
+  if (window.Plotly) document.querySelectorAll(".view:not([hidden]) .chart").forEach((el) => { if (el.data) Plotly.Plots.resize(el); });
+  location.hash = state.view === "player" && state.player ? "joueuse=" + state.player : state.view;
+}
+function openPlayer(id) { state.player = id; if (byId[id]) { state.team = byId[id].team; $("#f-team").value = state.team; } show("player"); window.scrollTo(0, 0); }
+
+$("#f-team").innerHTML = D.teams.map((t) => `<option>${t}</option>`).join("");
+$("#f-team").addEventListener("change", (e) => { state.team = e.target.value; state.player = null; render(); });
+$("#f-from").value = allFirst; $("#f-to").value = allLast;
+$("#f-from").min = $("#f-to").min = allFirst; $("#f-from").max = $("#f-to").max = allLast;
+$("#f-period").addEventListener("change", (e) => {
+  const v = e.target.value; $("#custom-dates").hidden = v !== "custom";
+  if (v === "all") { state.from = allFirst; state.to = allLast; }
+  else if (v === "custom") { state.from = $("#f-from").value; state.to = $("#f-to").value; }
+  else { state.from = v + "-01-01" < allFirst ? allFirst : v + "-01-01"; state.to = v + "-12-31" > allLast ? allLast : v + "-12-31"; }
+  render();
+});
+["#f-from", "#f-to"].forEach((s) => $(s).addEventListener("change", () => {
+  if ($("#f-from").value && $("#f-to").value && $("#f-from").value <= $("#f-to").value) { state.from = $("#f-from").value; state.to = $("#f-to").value; render(); }
+}));
+document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => show(t.dataset.view)));
+$("#state-table").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-sort]");
+  if (b) { const k = b.dataset.sort; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === "id" ? 1 : -1) }; renderTeam(); return; }
+  const tr = e.target.closest("tr[data-player]"); if (tr) openPlayer(tr.dataset.player);
+});
+$("#state-table").addEventListener("keydown", (e) => { const tr = e.target.closest("tr[data-player]"); if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openPlayer(tr.dataset.player); } });
+$("#f-player").addEventListener("change", (e) => { state.player = e.target.value; renderPlayer(); location.hash = "joueuse=" + state.player; });
+function step(d) { const ps = teamPlayers(); const i = ps.findIndex((p) => p.id === state.player); state.player = ps[(i + d + ps.length) % ps.length].id; renderPlayer(); location.hash = "joueuse=" + state.player; }
+$("#prev-player").addEventListener("click", () => step(-1));
+$("#next-player").addEventListener("click", () => step(1));
+$("#theme").addEventListener("click", () => {
+  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = cur === "dark" ? "light" : "dark";
+  try { localStorage.setItem("theme", document.documentElement.dataset.theme); } catch (e) {}
+  render();
+});
+try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+$("#footer").textContent = "Julie Landrevie — " + D.meta.source + ". Données mises à jour le " + frDate(D.meta.generated) + ".";
+
+// point d'entrée : #joueuse=A-03 ou #quality…
+const h = decodeURIComponent(location.hash.slice(1));
+if (h.startsWith("joueuse=") && byId[h.slice(8)]) openPlayer(h.slice(8));
+else if (["team", "player", "quality", "research", "method"].includes(h)) show(h);
+else show("team");
+window.addEventListener("hashchange", () => {
+  const h2 = decodeURIComponent(location.hash.slice(1));
+  if (h2.startsWith("joueuse=") && byId[h2.slice(8)] && h2.slice(8) !== state.player) openPlayer(h2.slice(8));
+});
+
+})();
+</script>
+</body>
+</html>

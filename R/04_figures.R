@@ -30,13 +30,16 @@ theme_perf <- function(base = 11) {
     )
 }
 
-short_id <- function(p) sub("^(Team[A-Za-z])-?(.{0,6}).*$", "\\1-\\2", p)
+# Nom d'affichage d'une joueuse (ex. "A-01") à partir de son identifiant
+player_label <- function(df, player_id) {
+  l <- unique(df$label[df$player == player_id])
+  if (length(l) == 0 || is.na(l[1])) player_id else l[1]
+}
 
 # 1. Qualité : complétude par joueuse et variable -----------------------------
 fig_qc_completeness <- function(completeness) {
   completeness |>
-    mutate(player = short_id(player),
-           player = reorder(player, completeness)) |>
+    mutate(player = reorder(label, completeness)) |>
     ggplot(aes(variable, player, fill = completeness)) +
     geom_tile(colour = "white", linewidth = 0.6) +
     scale_fill_gradientn(colours = COL$seq, limits = c(0, 1),
@@ -53,7 +56,7 @@ fig_qc_completeness <- function(completeness) {
 # 2. Vue équipe : charge hebdomadaire par joueuse ------------------------------
 fig_team_weekly <- function(weekly, team_name) {
   d <- weekly |> filter(team == team_name) |>
-    mutate(player = short_id(player),
+    mutate(player = label,
            weekly_load = ifelse(days_reported == 0, NA, weekly_load))
   ggplot(d, aes(week, reorder(player, weekly_load, FUN = function(x) mean(x, na.rm = TRUE)),
                 fill = weekly_load)) +
@@ -99,7 +102,7 @@ fig_player_load <- function(metrics, player_id, from = NULL, to = NULL, cfg = CO
     scale_colour_manual(values = c(`Aiguë (EWMA 7 j)` = COL$blue,
                                    `Chronique (EWMA 28 j)` = COL$orange), name = NULL) +
     scale_x_date(date_labels = "%d %b %y") +
-    labs(title = paste("Suivi de charge —", short_id(player_id)),
+    labs(title = paste0("Suivi de charge — joueuse ", player_label(d, player_id), " (", d$team[1], ")"),
          subtitle = sprintf(paste0("Barres : charge du jour (sRPE). Zone grise : ACWR %.1f–%.1f.\n",
                                    "Points rouges : ACWR hors zone alors que l'équipe y reste (couverture ≥ %d %%)."),
                             cfg$acwr_low, cfg$acwr_high, round(100 * cfg$min_coverage_chronic)),
@@ -126,7 +129,7 @@ fig_player_wellness <- function(metrics, player_id, injuries = NULL,
     geom_line(colour = COL$blue, linewidth = 0.7, na.rm = TRUE) +
     geom_point(data = filter(d, flag_wellness), colour = COL$alert, size = 2) +
     scale_x_date(date_labels = "%d %b %y") +
-    labs(title = paste("Wellness individuel —", short_id(player_id)),
+    labs(title = paste0("Wellness individuel — joueuse ", player_label(d, player_id), " (", d$team[1], ")"),
          subtitle = "Score composite (fatigue, humeur, disponibilité, sommeil, douleurs, stress)\nen écarts-types par rapport aux 28 jours précédents de la joueuse ; < 0 = moins bien que d'habitude",
          x = NULL, y = "z-score composite") +
     theme_perf()

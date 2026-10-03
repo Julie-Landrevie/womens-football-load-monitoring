@@ -43,7 +43,8 @@ write_var <- function(name, getter) {
   for (p in players) df[[p]] <- getter(sims[[p]])
   write.csv(df, file.path(out, paste0(name, ".csv")), row.names = FALSE, na = "")
 }
-write_var("daily_load", function(s) s$load)
+# Comme dans SoccerMon : un jour sans déclaration de charge vaut 0
+write_var("daily_load", function(s) ifelse(is.na(s$load), 0, s$load))
 for (v in c("fatigue", "mood", "readiness", "sleep_duration", "sleep_quality", "soreness", "stress"))
   write_var(v, function(s) s[[v]])
 # ACWR "fourni" (moyennes glissantes), pour tester la vérification de cohérence
