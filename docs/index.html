@@ -266,6 +266,12 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
         <div class="prose" id="qc-notes"></div>
       </div>
     </div>
+    <div id="gps-qc-block" hidden>
+      <h2>Données GPS</h2>
+      <p class="hint">Chaque instant est enregistré 10 fois (accéléromètre à 100 Hz) : une seule ligne est gardée par instant. Les trous de signal de plus d'une seconde ne sont pas comblés, et les séances de moins de 10 minutes ou 300 mètres sont écartées.</p>
+      <div class="table-wrap" style="max-width:640px"><table id="gps-qc-table"></table></div>
+    </div>
+
     <h2>Complétude par joueuse</h2>
     <p class="hint">Part des jours renseignés sur la période active de chaque joueuse (pour la charge : jours avec une charge &gt; 0).</p>
     <div class="panel"><div id="qc-heatmap" class="chart"></div></div>
@@ -281,6 +287,11 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
       <div class="panel"><p class="chart-title">Wellness (z-score)</p><p class="chart-sub">Médiane et intervalle interquartile</p><div id="r-well" class="chart"></div></div>
     </div>
     <div class="prose" id="research-text"></div>
+    <div id="ie-block" hidden>
+      <h2>Charge interne et charge externe</h2>
+      <p class="hint" id="ie-hint"></p>
+      <div class="panel"><div id="r-ie" class="chart"></div></div>
+    </div>
   </section>
 
   <!-- MÉTHODE -->
@@ -591,6 +602,9 @@ function renderQuality() {
     <p>Dans SoccerMon, <strong>un jour sans déclaration de charge vaut 0</strong> : un repos et un questionnaire non rempli sont indiscernables. Chaque joueuse est donc analysée sur sa période active, et un jour n'est « documenté » que s'il a une charge &gt; 0 ou un wellness rempli.</p>
     ${c ? `<p><strong>Validation.</strong> L'ACWR recalculé reproduit celui fourni par SoccerMon : corrélation ${nf(c.correlation, 2)}, ${pct(c.share_within_0_1 ?? c["share_within_0.1"])} des ${nf(c.n)} jours-joueuses à moins de 0,1 d'écart.</p>` : ""}
     <p>Les valeurs hors bornes plausibles sont écartées du calcul et listées dans les tables du pipeline, jamais corrigées en silence.</p>`;
+  const gq = D.gps_qc;
+  $("#gps-qc-block").hidden = !(gq && gq.indicateur);
+  if (gq && gq.indicateur) $("#gps-qc-table").innerHTML = "<tbody>" + gq.indicateur.map((k, i) => `<tr style="cursor:default"><td>${k}</td><td class="r"><strong>${gq.valeur[i]}</strong></td></tr>`).join("") + "</tbody>";
   const comp = D.qc.completeness;
   const ids = [...new Set(comp.id.filter((_, i) => comp.team[i] === state.team))].sort();
   const vars = [...new Set(comp.var)];
@@ -606,7 +620,22 @@ function renderQuality() {
 }
 
 /* ---------- recherche ---------- */
+function renderInternalExternal() {
+  const ie = D.internal_external && D.internal_external[state.team];
+  $("#ie-block").hidden = !ie;
+  if (!ie) return;
+  $("#ie-hint").textContent = "Chaque point est une joueuse un jour (" + state.team + ", " + nf(ie.n) + " jours avec GPS et sRPE). Corrélation r = " + nf(ie.r, 2) +
+    (ie.r >= 0.3 ? " : la charge perçue suit la distance parcourue, mais à distance égale une séance peut être vécue très différemment."
+      : " : la charge perçue est peu liée à la distance parcourue.") + " La charge externe dit ce que la joueuse a fait, la charge interne comment elle l'a vécu.";
+  plot("r-ie", [{ type: "scatter", mode: "markers", x: ie.km, y: ie.load, text: ie.id,
+    marker: { color: css("--s-blue"), size: 5, opacity: 0.35 },
+    hovertemplate: "<b>%{text}</b><br>%{x:.1f} km, %{y:,.0f} UA<extra></extra>" }],
+    baseLayout({ height: 360, hovermode: "closest",
+      xaxis: { title: { text: "Distance totale (km)" }, gridcolor: css("--line"), zeroline: false },
+      yaxis: { title: { text: "sRPE (UA)" }, gridcolor: css("--line"), zeroline: false } }));
+}
 function renderResearch() {
+  renderInternalExternal();
   const pr = D.injury_profile;
   if (!pr) { $("#research-text").innerHTML = '<p class="empty">Aucune déclaration de blessure dans les données chargées.</p>'; return; }
   const band = (q1, q3, med, color, fmt) => [

@@ -15,7 +15,7 @@ local({
   if (!is.null(here)) setwd(here)
 })
 
-for (f in sort(list.files("R", pattern = "\\.R$", full.names = TRUE))) source(f)
+for (f in sort(list.files("R", pattern = "\\.R$", full.names = TRUE))) source(f, encoding = "UTF-8")
 
 out_tab <- file.path(CONFIG$output_dir, "tables")
 out_fig <- file.path(CONFIG$output_dir, "figures")
@@ -40,6 +40,18 @@ metrics <- wide |>
   compute_load_metrics() |>
   compute_wellness_z() |>
   compute_flags()
+# Charge externe (GPS) : table journalière produite une fois par run_gps.R
+gps_daily <- load_gps_daily()
+gps_qc <- NULL
+if (!is.null(gps_daily)) {
+  message("   GPS : ", nrow(gps_daily), " jours-joueuses (data/processed/gps_daily.csv)")
+  metrics <- metrics |>
+    left_join(gps_daily |> select(player, date, total_km, hsr_m, sprint_m, vmax_kmh, n_acc, n_dec),
+              by = c("player", "date"))
+  if (file.exists("data/processed/gps_qc.csv")) gps_qc <- read_csv("data/processed/gps_qc.csv", show_col_types = FALSE)
+} else {
+  message("   GPS : pas de data/processed/gps_daily.csv (lancer run_gps.R pour l'ajouter)")
+}
 consistency <- qc_consistency(metrics)
 weekly      <- weekly_summary(metrics)
 inj_win     <- injury_windows(metrics, injuries)
@@ -82,12 +94,14 @@ for (pl in example_players) {
   save_fig(fig_player_wellness(metrics, pl, injuries), paste0("04_wellness_", player_label(metrics, pl), ".png"), h = 4.5)
 }
 save_fig(fig_injury_profile(inj_win), "05_profil_pre_blessure.png", h = 4.5)
+save_fig(fig_internal_external(metrics), "06_interne_externe.png", w = 10, h = 5)
+for (pl in example_players) save_fig(fig_player_gps(metrics, pl), paste0("07_gps_", player_label(metrics, pl), ".png"), h = 6)
 
 saveRDS(list(daily_long = daily_long, injuries = injuries, metrics = metrics,
              completeness = completeness, out_of_range = out_of_range,
              duplicates = duplicates, summary_qc = summary_qc, zero_runs = zero_runs,
              consistency = consistency, weekly = weekly, alerts = alerts,
-             inj_win = inj_win, example_players = example_players,
+             inj_win = inj_win, example_players = example_players, gps_qc = gps_qc,
              config = CONFIG, data_dir = CONFIG$data_dir),
         file.path(CONFIG$output_dir, "pipeline.rds"))
 
@@ -98,10 +112,10 @@ save_doc(fig_player_load(metrics, example_players[1]), "suivi_joueuse.png", 9, 6
 save_doc(fig_team_weekly(weekly, sort(unique(weekly$team))[1]), "charge_hebdo_equipe.png", 11, 7)
 save_doc(fig_injury_profile(inj_win), "profil_pre_blessure.png", 9, 4.5)
 save_doc(fig_qc_completeness(completeness), "qc_completude.png", 9, 10)
+save_doc(fig_internal_external(metrics), "interne_externe.png", 10, 5)
 
 message("   Tableau de bord web")
-export_dashboard(readRDS(file.path(CONFIG$output_dir, "pipeline.rds")), out_dir = "docs",
-                 gps = if (exists("gps_daily")) gps_daily else NULL)
+export_dashboard(readRDS(file.path(CONFIG$output_dir, "pipeline.rds")), out_dir = "docs")
 
 message("5/5 Rapport HTML")
 # Pandoc : si absent du PATH, on le cherche dans RStudio / Homebrew

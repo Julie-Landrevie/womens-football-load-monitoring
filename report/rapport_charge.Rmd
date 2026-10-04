@@ -138,7 +138,51 @@ for (pl in R$example_players) {
 }
 ```
 
-## 4. Piste de recherche appliquée
+## 4. Charge externe (GPS)
+
+```{r results='asis'}
+has_gps <- "total_km" %in% names(m)
+if (!has_gps) cat("_Données GPS non intégrées : lancer `Rscript run_gps.R <dossier GPS>` puis relancer le pipeline._\n")
+```
+
+```{r eval=has_gps}
+if (!is.null(R$gps_qc)) kable(R$gps_qc, col.names = c("Contrôle qualité GPS", "Valeur"))
+```
+
+```{r eval=has_gps}
+m |>
+  filter(!is.na(total_km)) |>
+  group_by(Équipe = team) |>
+  summarise(`Jours avec GPS` = n(),
+            `Distance (km)` = round(median(total_km), 1),
+            `Course > 16 km/h (m)` = round(median(hsr_m)),
+            `Sprint > 20 km/h (m)` = round(median(sprint_m)),
+            `Accélérations > 2 m/s²` = round(median(n_acc)),
+            `Vitesse max (km/h)` = round(median(vmax_kmh), 1)) |>
+  kable(caption = "Valeurs médianes par jour d'entraînement ou de match", align = "lrrrrrr")
+```
+
+```{r eval=has_gps, fig.height=5}
+fig_internal_external(m)
+```
+
+```{r eval=has_gps, results='asis'}
+if (has_gps) {
+  r <- m |> filter(load > 0, !is.na(total_km), total_km > 0) |> group_by(team) |>
+    summarise(r = cor(load, total_km), .groups = "drop")
+  cat(sprintf(paste0("La charge perçue (sRPE) et la distance parcourue sont corrélées ",
+                     "(r = %s selon l'équipe) mais loin d'être identiques : à distance égale, une séance peut ",
+                     "être ressentie très différemment. C'est l'intérêt de suivre les deux : la charge externe ",
+                     "dit ce que la joueuse a fait, la charge interne comment elle l'a vécu.\n"),
+              paste(sprintf("%.2f", r$r), collapse = " et ")))
+}
+```
+
+```{r eval=has_gps, fig.height=6, results='asis'}
+for (pl in R$example_players) { p <- fig_player_gps(m, pl); if (!is.null(p)) print(p) }
+```
+
+## 5. Piste de recherche appliquée
 
 **Question.** Les jours qui précèdent une blessure déclarée se distinguent-ils par
 une évolution de la charge (ACWR) ou de l'état de forme déclaré (wellness) par
@@ -158,8 +202,9 @@ if (is.null(p)) cat("_Aucune déclaration de blessure trouvée dans les données
   blessure (modèle mixte avec effet aléatoire joueuse).
 - L'ACWR est discuté dans la littérature (couplage aigu/chronique, instabilité des
   ratios) : il sert ici de repère de progressivité, pas d'outil de prédiction.
-- Charge **interne** uniquement : la charge externe (GPS STATSports, 10 Hz) est
-  disponible dans SoccerMon (~92 Go) et constitue l'extension naturelle du projet.
+- Charge externe : distances et vitesses issues du GPS (10 Hz). La fréquence
+  cardiaque enregistrée n'est pas exploitable (ceinture cardio absente lors de la
+  plupart des séances).
 
 ## Méthode
 

@@ -46,6 +46,18 @@ conclusion causale (voir *Limites*).
 
 ![Profil avant blessure](docs/figures/profil_pre_blessure.png)
 
+**5. Charge externe : ce que la joueuse a fait, et comment elle l'a vécu.**
+Les 10 075 fichiers GPS (10 Hz, ~99 Go) ont été agrégés en 9 908 jours-joueuses
+(86 séances trop courtes écartées, aucun fichier illisible). Valeurs médianes par
+jour : ~4,8 km, ~270 m au-dessus de 16 km/h, ~60 m de sprint au-dessus de 20 km/h,
+vitesse maximale ~23,5 km/h. La charge perçue (sRPE) et la distance sont
+**modérément corrélées (r = 0,52 et 0,46 selon l'équipe)** : à distance égale, une
+séance peut être vécue très différemment, ce qui justifie de suivre les deux. Le nuage
+de points fait aussi apparaître des bandes horizontales vers 10–15 km et 700–900 UA,
+qui correspondent vraisemblablement aux matchs (≈ 90 min × RPE 8–10).
+
+![Charge interne et charge externe](docs/figures/interne_externe.png)
+
 ## Ce que fait le pipeline
 
 | Étape | Contenu | Fichier |
@@ -56,6 +68,7 @@ conclusion causale (voir *Limites*).
 | Visualisation | vue qualité, vue équipe (charge hebdomadaire), vue joueuse (charge + ACWR, wellness), profil pré-blessure | `R/04_figures.R` |
 | Rapport | rapport HTML autonome à destination du staff | `report/rapport_charge.Rmd` |
 | Tableau de bord | export des données (`docs/data.js`) pour la page web interactive `docs/index.html`, publiée avec GitHub Pages | `R/05_dashboard.R` |
+| Charge externe (GPS) | lecture des ~10 000 fichiers GPS (un par joueuse et par jour), distance totale, course > 16 km/h, sprint > 20 km/h, vitesse max, accélérations et décélérations > 2 m/s² | `R/06_gps.R`, `run_gps.R` |
 
 Tous les seuils (fenêtres, zone d'ACWR, monotonie, seuil wellness, couverture
 minimale) sont réglables dans `R/00_config.R`.
@@ -75,6 +88,12 @@ minimale) sont réglables dans `R/00_config.R`.
 - **Wellness individualisé** : chaque item est comparé aux 28 jours *précédents* de la
   joueuse (sans le jour courant). Une joueuse qui note toujours 3/5 n'est pas
   comparée à une joueuse qui note toujours 5/5.
+- **GPS : une ligne par instant.** Dans les fichiers SoccerMon, chaque instant GPS
+  (10 Hz) est répété ~10 fois, car l'accéléromètre enregistre à 100 Hz sur des lignes
+  séparées. Une seule ligne est gardée par instant, sinon les distances seraient
+  multipliées par 10. La distance est intégrée avec le vrai pas de temps entre deux
+  mesures ; les trous de signal de plus d'une seconde ne sont pas comblés et leur
+  part est mesurée. Vitesses > 36 km/h écartées, vitesse max lissée sur 0,5 s.
 - **Points d'attention, pas prédictions** : l'ACWR est débattu dans la littérature
   (Impellizzeri et al., 2020). Il sert ici de repère de progressivité de la charge.
 
@@ -84,7 +103,8 @@ minimale) sont réglables dans `R/00_config.R`.
 R ≥ 4.2 et les packages :
 ```r
 install.packages(c("dplyr", "tidyr", "readr", "purrr", "stringr",
-                   "ggplot2", "scales", "rmarkdown", "knitr"))
+                   "ggplot2", "scales", "rmarkdown", "knitr", "jsonlite",
+                   "arrow"))   # arrow : lecture des fichiers GPS (parquet)
 ```
 
 ### 2. Données
@@ -93,6 +113,17 @@ GPS fait environ 92 Go) depuis Zenodo, DOI
 [10.5281/zenodo.10033832](https://doi.org/10.5281/zenodo.10033832), puis décompresser
 l'archive dans `data/raw/`. Le chargeur cherche les fichiers (`daily_load.csv`,
 `fatigue.csv`, …) dans tous les sous-dossiers.
+
+**GPS (facultatif).** Télécharger les 4 archives `objective-*.zip` (~99 Go), les
+décompresser dans un dossier **en dehors du dépôt** (par ex. `~/Desktop/SoccerMon_GPS`),
+puis lancer une seule fois :
+```bash
+Rscript run_gps.R ~/Desktop/SoccerMon_GPS
+```
+Le script lit les fichiers en parallèle (10 à 30 min selon la machine), peut être
+interrompu et relancé sans tout refaire, et écrit une petite table
+`data/processed/gps_daily.csv` (une ligne par joueuse et par jour), versionnée dans le
+dépôt : le reste du pipeline n'a plus besoin des 99 Go.
 
 ### 3. Exécution
 ```bash
@@ -110,6 +141,8 @@ dans `outputs/tables/correspondance_joueuses.csv`.
 ### Tester sans les données
 ```bash
 Rscript tests/make_test_data.R            # jeu SYNTHÉTIQUE au format SoccerMon
+Rscript tests/make_test_gps.R             # GPS synthétiques (≈ 1,5 Go de CSV)
+Rscript run_gps.R data/test_gps
 SOCCERMON_DIR=data/test Rscript run_pipeline.R
 ```
 Les résultats obtenus sur ce jeu de test n'ont aucune valeur sportive. Il sert
@@ -120,8 +153,11 @@ uniquement à vérifier que le code tourne.
 - Blessures **auto-déclarées** (douleur mineure ou majeure), sans diagnostic médical.
 - Analyse pré-blessure **descriptive**. Étape suivante : comparer avec des fenêtres
   sans blessure, avec un modèle mixte (effet aléatoire joueuse).
-- Charge **externe** (GPS STATSports 10 Hz) : extension prévue (distance totale,
-  haute intensité, accélérations), puis croisement charge interne / charge externe.
+- GPS : la fréquence cardiaque enregistrée n'est pas exploitable (ceinture absente
+  sur la plupart des séances) ; pas de distinction entraînement / match dans les
+  fichiers.
+- Étape suivante : ACWR calculé sur la charge externe (distance, haute intensité)
+  et comparaison avec l'ACWR de charge interne.
 
 ## Références
 

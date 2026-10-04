@@ -21,7 +21,7 @@ flag_bits <- function(m) {
 
 rnd <- function(x, d) ifelse(is.na(x) | !is.finite(x), NA, round(x, d))
 
-export_dashboard <- function(res, out_dir = "docs", gps = NULL) {
+export_dashboard <- function(res, out_dir = "docs") {
   dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
   m <- res$metrics |> arrange(label, date)
   m$flags <- flag_bits(m)
@@ -50,9 +50,8 @@ export_dashboard <- function(res, out_dir = "docs", gps = NULL) {
         doc     = I(as.integer(d$load_reported)),
         flags   = I(d$flags)
       )
-      if (!is.null(gps)) {
-        g <- gps |> filter(player == d$player[1]) |> select(date, total_km, hsr_m, sprint_m, n_acc)
-        dd <- tibble(date = d$date) |> left_join(g, by = "date")
+      if ("total_km" %in% names(d)) {
+        dd <- d
         out$gps_km     <- I(rnd(dd$total_km, 2))
         out$gps_hsr    <- I(rnd(dd$hsr_m, 0))
         out$gps_sprint <- I(rnd(dd$sprint_m, 0))
@@ -85,6 +84,14 @@ export_dashboard <- function(res, out_dir = "docs", gps = NULL) {
     prof <- c(as.list(prof), n = n_distinct(res$inj_win$injury_id))
   }
 
+  ie <- NULL
+  if ("total_km" %in% names(m)) {
+    pts <- m |> filter(load > 0, !is.na(total_km), total_km > 0)
+    ie <- lapply(split(pts, pts$team), function(x) list(
+      load = I(round(x$load)), km = I(round(x$total_km, 2)), id = I(x$label),
+      r = round(cor(x$load, x$total_km), 2), n = nrow(x)))
+  }
+
   cs <- res$consistency
   data <- list(
     meta = list(
@@ -94,7 +101,7 @@ export_dashboard <- function(res, out_dir = "docs", gps = NULL) {
                         monotony_high = res$config$monotony_high,
                         wellness_z = res$config$wellness_z_alert,
                         min_coverage = res$config$min_coverage_chronic),
-      has_gps = !is.null(gps)
+      has_gps = "total_km" %in% names(m)
     ),
     teams = sort(unique(players$team)),
     players = players,
@@ -105,7 +112,9 @@ export_dashboard <- function(res, out_dir = "docs", gps = NULL) {
       completeness = comp,
       consistency = if (!is.null(cs) && nrow(cs)) as.list(cs) else NULL
     ),
-    injury_profile = prof
+    injury_profile = prof,
+    gps_qc = res$gps_qc,
+    internal_external = ie
   )
 
   js <- paste0("// Généré par run_pipeline.R — ne pas modifier à la main\nwindow.DASHBOARD_DATA = ",

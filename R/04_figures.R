@@ -165,3 +165,42 @@ fig_injury_profile <- function(inj_win) {
          caption = "Analyse exploratoire : blessures auto-déclarées, sans groupe témoin. Ne permet aucune conclusion causale.") +
     theme_perf()
 }
+
+# 6. Charge interne vs charge externe (sRPE vs distance GPS) -------------------
+fig_internal_external <- function(metrics) {
+  if (!"total_km" %in% names(metrics)) return(NULL)
+  d <- metrics |> filter(load > 0, !is.na(total_km), total_km > 0)
+  if (nrow(d) < 20) return(NULL)
+  lab <- d |> group_by(team) |>
+    summarise(r = cor(load, total_km), n = n(), .groups = "drop") |>
+    mutate(facet = sprintf("%s  (r = %.2f, n = %s jours)", team, r, format(n, big.mark = " ")))
+  d <- d |> left_join(lab |> select(team, facet), by = "team")
+  ggplot(d, aes(total_km, load)) +
+    geom_point(colour = COL$blue, alpha = 0.25, size = 1.1, stroke = 0) +
+    geom_smooth(method = "lm", formula = y ~ x, se = FALSE, colour = COL$orange, linewidth = 0.8) +
+    facet_wrap(~ facet) +
+    labs(title = "Charge interne et charge externe",
+         subtitle = "Chaque point = une joueuse un jour : distance GPS (km) et charge perçue (sRPE)",
+         x = "Distance totale (km)", y = "sRPE (UA)",
+         caption = "r : corrélation de Pearson. Les écarts à la droite = séances ressenties plus (ou moins) dures que leur volume de course.") +
+    theme_perf()
+}
+
+# 7. Charge externe d'une joueuse (distance et haute intensité) -----------------
+fig_player_gps <- function(metrics, player_id) {
+  if (!"total_km" %in% names(metrics)) return(NULL)
+  d <- metrics |> filter(player == player_id, !is.na(total_km))
+  if (nrow(d) == 0) return(NULL)
+  long <- bind_rows(
+    d |> transmute(date, panel = "Distance totale (km)", value = total_km),
+    d |> transmute(date, panel = "Course > 16 km/h (m)", value = hsr_m),
+    d |> transmute(date, panel = "Sprint > 20 km/h (m)", value = sprint_m))
+  long$panel <- factor(long$panel, levels = unique(long$panel))
+  ggplot(long, aes(date, value)) +
+    geom_col(fill = COL$blue, width = 1) +
+    facet_grid(panel ~ ., scales = "free_y", switch = "y") +
+    scale_x_date(date_labels = "%b %y") +
+    labs(title = paste0("Charge externe — joueuse ", player_label(d, player_id), " (", d$team[1], ")"),
+         subtitle = "GPS STATSports 10 Hz, une barre par jour", x = NULL, y = NULL) +
+    theme_perf() + theme(strip.placement = "outside", strip.text.y.left = element_text(angle = 0, hjust = 1))
+}
