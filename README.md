@@ -44,9 +44,12 @@ ajoutées l'une après l'autre, les ramènent à des signaux individuels :
    tableau de bord affiche le nombre d'épisodes par joueuse, et le nombre de jours
    concernés au survol.
 
-Sur le jeu de test, ces règles font passer les alertes de 17 % à 4 % des jours,
-et de 48 à 10 épisodes par joueuse. Les trois paramètres sont réglables dans
-`R/00_config.R` (`team_margin`, `alert_persistence`).
+Sur les données SoccerMon, la part de jours en « sous-charge » passe de 13 % à
+**3 % (équipe A) et 2 % (équipe B)**, la monotonie de 7 % à 3 % et de 3 % à 2 %,
+et les hausses rapides deviennent rares (< 1 %). Il reste en médiane **13 à 16
+épisodes d'alerte par joueuse et par an**, soit environ un toutes les trois à
+quatre semaines : un volume qu'un staff peut examiner un par un. Les paramètres
+sont réglables dans `R/00_config.R` (`team_margin`, `alert_persistence`).
 
 ![Charge hebdomadaire par joueuse](docs/figures/charge_hebdo_equipe.png)
 
