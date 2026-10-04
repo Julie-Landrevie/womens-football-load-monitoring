@@ -26,6 +26,16 @@ CONFIG <- list(
   # Monotonie (Foster 1998) : > 2 = peu de variation de charge sur la semaine
   monotony_high = 2,
 
+  # Limiter la "fatigue d'alerte" (un staff qui reçoit trop d'alertes ne les
+  # lit plus) :
+  #  - persistance : une alerte de charge (ACWR, monotonie) n'est émise
+  #    qu'après N jours consécutifs hors zone ;
+  #  - écart à l'équipe : l'ACWR de la joueuse doit s'écarter d'au moins
+  #    `team_margin` de la médiane de son équipe ce jour-là ;
+  #  - les alertes sont comptées en épisodes (jours consécutifs = 1 épisode).
+  alert_persistence = 3,
+  team_margin       = 0.2,
+
   # Wellness : z-score individuel (référence glissante propre à la joueuse)
   wellness_baseline_window = 28,
   wellness_baseline_min    = 10,   # nb min de jours pour établir la référence

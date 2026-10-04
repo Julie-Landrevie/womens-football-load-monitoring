@@ -125,21 +125,46 @@ compute_wellness_z <- function(metrics, cfg = CONFIG) {
 # de son équipe : ACWR individuel hors zone ALORS QUE la médiane de l'équipe
 # ce jour-là est dans la zone.
 compute_flags <- function(metrics, cfg = CONFIG) {
+  k <- cfg$alert_persistence; mg <- cfg$team_margin
   metrics |>
     group_by(team, date) |>
     mutate(team_acwr_median = median(acwr_ewma[interpretable], na.rm = TRUE),
            team_acwr_median = ifelse(is.nan(team_acwr_median), NA_real_, team_acwr_median)) |>
     ungroup() |>
     mutate(
-      team_in_zone     = !is.na(team_acwr_median) &
-                         team_acwr_median >= cfg$acwr_low & team_acwr_median <= cfg$acwr_high,
-      flag_acwr_high   = interpretable & team_in_zone & !is.na(acwr_ewma) & acwr_ewma > cfg$acwr_high,
-      flag_acwr_low    = interpretable & team_in_zone & !is.na(acwr_ewma) & acwr_ewma < cfg$acwr_low &
-                         !is.na(chronic_ewma) & chronic_ewma > 0,
-      flag_monotony    = interpretable & !is.na(monotony_calc) & monotony_calc > cfg$monotony_high,
-      flag_wellness    = !is.na(wellness_z) & wellness_z < cfg$wellness_z_alert,
-      n_flags = flag_acwr_high + flag_acwr_low + flag_monotony + flag_wellness
-    )
+      team_in_zone = !is.na(team_acwr_median) &
+                     team_acwr_median >= cfg$acwr_low & team_acwr_median <= cfg$acwr_high,
+      # conditions brutes du jour
+      raw_high = interpretable & team_in_zone & !is.na(acwr_ewma) & acwr_ewma > cfg$acwr_high &
+                 acwr_ewma - team_acwr_median >= mg,
+      raw_low  = interpretable & team_in_zone & !is.na(acwr_ewma) & acwr_ewma < cfg$acwr_low &
+                 team_acwr_median - acwr_ewma >= mg & !is.na(chronic_ewma) & chronic_ewma > 0,
+      raw_mono = interpretable & !is.na(monotony_calc) & monotony_calc > cfg$monotony_high
+    ) |>
+    arrange(player, date) |>
+    group_by(player) |>
+    mutate(
+      # persistance : alerte à partir du k-ième jour consécutif
+      flag_acwr_high = persistent(raw_high, k),
+      flag_acwr_low  = persistent(raw_low, k),
+      flag_monotony  = persistent(raw_mono, k),
+      # le wellness est un signal du jour même : pas de persistance exigée
+      flag_wellness  = !is.na(wellness_z) & wellness_z < cfg$wellness_z_alert,
+      n_flags = flag_acwr_high + flag_acwr_low + flag_monotony + flag_wellness,
+      # début d'un épisode d'alerte (jours consécutifs avec alerte = 1 épisode)
+      episode_start = n_flags > 0 & dplyr::lag(n_flags, default = 0) == 0
+    ) |>
+    ungroup() |>
+    select(-raw_high, -raw_low, -raw_mono)
+}
+
+#' Vrai à partir du k-ième jour consécutif où x est vrai
+persistent <- function(x, k) {
+  x <- coalesce(x, FALSE)
+  if (k <= 1) return(x)
+  r <- rle(x)
+  pos <- sequence(r$lengths)            # rang du jour dans sa séquence
+  x & pos >= k
 }
 
 #' Résumé hebdomadaire par joueuse (pour la vue équipe)

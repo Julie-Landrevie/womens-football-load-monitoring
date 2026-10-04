@@ -27,12 +27,26 @@ L'ACWR recalculé reproduit celui fourni dans SoccerMon (corrélation 1,00 ; 98 
 21 490 jours-joueuses à moins de 0,1 d'écart). La méthode d'origine (moyennes
 glissantes 7 j / 28 j, jours sans déclaration à 0) est ainsi confirmée.
 
-**3. Des alertes lues en contexte.**
-Lors d'une coupure ou d'une reprise planifiée, toute l'équipe sort de la zone
-d'ACWR en même temps. En ne signalant une joueuse que lorsqu'elle s'écarte de
-la médiane de son équipe, la part de jours en « sous-charge » passe de **19 % à
-13 %**. Les alertes restantes correspondent à des décrochages individuels
-(absence probable) plutôt qu'au calendrier collectif.
+**3. Des alertes qu'un staff peut réellement traiter.**
+Appliqués tels quels, les seuils classiques déclenchaient une alerte sur près d'un
+jour sur cinq, soit une centaine de jours par joueuse sur deux saisons : à ce
+niveau, un staff ne lit plus les alertes (« fatigue d'alerte »). Trois règles,
+ajoutées l'une après l'autre, les ramènent à des signaux individuels :
+
+1. **Contexte équipe.** Lors d'une coupure ou d'une reprise planifiée, toute
+   l'équipe sort de la zone d'ACWR en même temps. Une joueuse n'est signalée que si
+   elle sort de la zone alors que la médiane de son équipe y reste, **avec un écart
+   d'au moins 0,2** à cette médiane. Cette seule règle fait passer la part de jours
+   en « sous-charge » de 19 % à 13 %.
+2. **Persistance.** Une alerte de charge (ACWR, monotonie) n'apparaît qu'au
+   **3ᵉ jour consécutif** hors zone : les oscillations d'un jour sont ignorées.
+3. **Épisodes.** Des jours d'alerte consécutifs forment **un seul épisode**. Le
+   tableau de bord affiche le nombre d'épisodes par joueuse, et le nombre de jours
+   concernés au survol.
+
+Sur le jeu de test, ces règles font passer les alertes de 17 % à 4 % des jours,
+et de 48 à 10 épisodes par joueuse. Les trois paramètres sont réglables dans
+`R/00_config.R` (`team_margin`, `alert_persistence`).
 
 ![Charge hebdomadaire par joueuse](docs/figures/charge_hebdo_equipe.png)
 
@@ -79,8 +93,11 @@ minimale) sont réglables dans `R/00_config.R`.
   période active de chaque joueuse ; un jour est « documenté » s'il a une charge > 0
   ou un wellness rempli ; **aucune alerte sous 70 % de jours documentés** sur 28 j.
 - **Contexte équipe** : une alerte d'ACWR n'est émise que si la joueuse sort de la
-  zone alors que la médiane de son équipe y reste (pas d'alerte pendant une
-  coupure ou une reprise collective).
+  zone alors que la médiane de son équipe y reste, avec un écart d'au moins 0,2
+  (pas d'alerte pendant une coupure ou une reprise collective).
+- **Persistance et épisodes** : alerte de charge au 3ᵉ jour consécutif hors zone,
+  et jours d'alerte consécutifs regroupés en un épisode, pour limiter la fatigue
+  d'alerte. Le wellness reste un signal du jour (pas de persistance exigée).
 - **Valeurs suspectes** : mises à NA pour le calcul, jamais corrigées en silence, et
   listées dans `outputs/tables/qc_valeurs_suspectes.csv`.
 - **ACWR en EWMA** (Williams et al., 2017) plutôt qu'en moyennes glissantes seules,

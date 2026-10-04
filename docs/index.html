@@ -220,7 +220,7 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
         <p class="chart-title">Rapport aigu / chronique (ACWR)</p>
         <div class="legend-inline">
           <span><i class="sw zone"></i>Zone de référence</span>
-          <span><i class="sw dot" style="background:var(--alert)"></i>Hors zone alors que l'équipe y reste</span>
+          <span><i class="sw dot" style="background:var(--alert)"></i>Alerte : hors zone 3 jours de suite, à l'écart de l'équipe</span>
           <span class="muted">Courbe masquée quand moins de 70 % des 28 derniers jours sont documentés</span>
         </div>
         <div id="p-acwr" class="chart"></div>
@@ -310,7 +310,9 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
     <h3>Règles d'alerte</h3>
     <ul>
       <li>Aucune alerte de charge si moins de 70 % des 28 derniers jours sont documentés (charge &gt; 0 ou wellness rempli).</li>
-      <li>Une alerte d'ACWR n'est émise que si la joueuse sort de la zone alors que la médiane de son équipe y reste : une coupure ou une reprise collective n'est pas un signal individuel.</li>
+      <li>Une alerte d'ACWR n'est émise que si la joueuse sort de la zone alors que la médiane de son équipe y reste, avec un écart d'au moins 0,2 à cette médiane : une coupure ou une reprise collective n'est pas un signal individuel.</li>
+      <li>Persistance : une alerte de charge (ACWR, monotonie) n'apparaît qu'au 3<sup>e</sup> jour consécutif hors zone, pour ignorer les oscillations d'un jour.</li>
+      <li>Les alertes sont comptées en épisodes : plusieurs jours d'alerte consécutifs forment un seul épisode. L'objectif est un nombre d'alertes qu'un staff peut réellement traiter.</li>
       <li>Wellness : alerte sous −1,5 écart-type par rapport à la normale de la joueuse.</li>
     </ul>
     <h3>Limites</h3>
@@ -414,9 +416,14 @@ function endState(id) {
   let load7 = 0; for (let j = Math.max(0, k - 6); j <= k; j++) load7 += s.load[j] || 0;
   let well = null; for (let j = k; j >= Math.max(i0, k - 6); j--) if (s.well[j] != null) { well = s.well[j]; break; }
   let flags7 = 0; for (let j = Math.max(i0, k - 6); j <= k; j++) flags7 |= s.flags[j];
-  let alerts = 0, docd = 0; for (let j = i0; j <= i1; j++) { if (s.flags[j]) alerts++; if (s.doc[j]) docd++; }
+  // épisodes d'alerte : une suite de jours consécutifs avec alerte = 1 épisode
+  let alerts = 0, alertDays = 0, docd = 0;
+  for (let j = i0; j <= i1; j++) {
+    if (s.flags[j]) { alertDays++; if (j === i0 || !s.flags[j - 1]) alerts++; }
+    if (s.doc[j]) docd++;
+  }
   return { date: addDays(s.start, k), load7, acwr: s.acwr[k], acwrRaw: s.acwr_raw[k], well, cov: s.cov[k],
-           flags7, alerts, docShare: docd / (i1 - i0 + 1), days: i1 - i0 + 1 };
+           flags7, alerts, alertDays, docShare: docd / (i1 - i0 + 1), days: i1 - i0 + 1 };
 }
 
 /* ---------- vue équipe ---------- */
@@ -428,14 +435,14 @@ function renderTeam() {
   const weekly = weeklyMatrix(ps);
   const lastWeekIdx = weekly.weeks.length - 1;
   const lastWeekVals = weekly.z.map((r) => r[lastWeekIdx]).filter((v) => v != null);
-  const totalAlerts = rows.reduce((a, r) => a + r.alerts, 0);
   const totalDays = rows.reduce((a, r) => a + r.days, 0);
+  const epiPerSeason = median(rows.map((r) => r.alerts / (r.days / 365)));
   const watch = rows.filter((r) => r.flags7).length;
   $("#team-kpis").innerHTML = [
     kpi(ps.length, "joueuses suivies", "sur la période"),
     kpi(nf(median(lastWeekVals)), "charge hebdo médiane (UA)", lastWeekIdx >= 0 ? "semaine du " + frDate(weekly.weeks[lastWeekIdx]) : ""),
     kpi(pct(rows.reduce((a, r) => a + r.docShare * r.days, 0) / (totalDays || 1)), "jours documentés", "charge > 0 ou wellness rempli"),
-    kpi(watch, "joueuses à surveiller", "point d'attention sur les 7 derniers jours ; " + pct(totalAlerts / (totalDays || 1)) + " des jours avec alerte")
+    kpi(watch, "joueuses à surveiller", "point d'attention sur les 7 derniers jours ; " + nf(epiPerSeason, 1) + " épisodes d'alerte par joueuse et par an (médiane)")
   ].join("");
 
   // tableau
@@ -447,7 +454,7 @@ function renderTeam() {
     { key: "well", label: "Wellness (z)", cls: "r" },
     { key: "cov", label: "Jours documentés (28 j)", cls: "r" },
     { key: "flags7", label: "Points d'attention (7 j)" },
-    { key: "alerts", label: "Jours avec alerte", cls: "r" }
+    { key: "alerts", label: "Épisodes d'alerte", cls: "r" }
   ];
   const { key, dir } = state.sort;
   rows.sort((a, b) => {
@@ -466,7 +473,7 @@ function renderTeam() {
       <td class="r">${nf(r.well, 1)}</td>
       <td class="r">${pct(r.cov)}</td>
       <td>${flagChips(r.flags7)}</td>
-      <td class="r">${r.alerts}</td></tr>`).join("") + "</tbody>";
+      <td class="r" title="${r.alertDays} jours avec alerte">${r.alerts}</td></tr>`).join("") + "</tbody>";
   $("#state-table").innerHTML = head + body;
   $("#team-state-hint").textContent = "Dernières valeurs connues de chaque joueuse. * ACWR non interprétable (moins de 70 % des 28 derniers jours documentés). Cliquez sur une ligne pour ouvrir le suivi de la joueuse.";
 
@@ -521,7 +528,7 @@ function renderPlayer() {
     kpi(nf(es.load7), "charge 7 j (UA)", "au " + frDate(es.date)),
     kpi(es.acwr != null ? nf(es.acwr, 2) : nf(es.acwrRaw, 2) + "*", "ACWR", es.acwr != null ? "zone de référence " + nf(T.acwr_low, 1) + "–" + nf(T.acwr_high, 1) : "* non interprétable : peu de jours documentés"),
     kpi(nf(es.well, 1), "wellness (z)", "0 = sa normale"),
-    kpi(es.alerts, "jours avec alerte", "sur " + es.days + " jours de la période")
+    kpi(es.alerts, "épisodes d'alerte", es.alertDays + " jours concernés sur " + es.days)
   ].join("");
 
   const [i0, i1] = r;

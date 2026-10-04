@@ -108,16 +108,24 @@ for (tm in sort(unique(R$weekly$team))) print(fig_team_weekly(R$weekly, tm))
 
 ### Fréquence des points d'attention
 
-Les alertes d'ACWR sont **contextualisées par rapport à l'équipe** : pendant une
-coupure ou une reprise planifiée, toute l'équipe sort de la zone de référence en
-même temps, ce qui n'a pas de sens individuel. Une joueuse n'est signalée que si
-son ACWR sort de la zone alors que la médiane de son équipe y reste.
+Les alertes sont conçues pour rester **traitables par un staff** :
+
+- **contexte équipe** : une joueuse n'est signalée que si son ACWR sort de la zone
+  alors que la médiane de son équipe y reste, avec un écart d'au moins
+  `r CONFIG$team_margin` (une coupure ou une reprise collective n'est pas un
+  signal individuel) ;
+- **persistance** : une alerte de charge n'apparaît qu'au
+  `r CONFIG$alert_persistence`^e^ jour consécutif hors zone ;
+- **épisodes** : des jours d'alerte consécutifs forment un seul épisode.
 
 ```{r}
 m |>
   filter(interpretable | !is.na(wellness_z)) |>
   group_by(Équipe = team) |>
   summarise(`Jours-joueuses analysés` = n(),
+            `Épisodes / joueuse / an (médiane)` = {
+              e <- tapply(episode_start, player, sum); d <- tapply(date, player, length)
+              round(median(e / (d / 365)), 1) },
             `Hausse rapide (ACWR > 1,5)` = pct(mean(flag_acwr_high)),
             `Sous-charge (ACWR < 0,8)` = pct(mean(flag_acwr_low)),
             `Monotonie > 2` = pct(mean(flag_monotony)),
