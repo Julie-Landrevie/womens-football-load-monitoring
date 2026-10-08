@@ -194,3 +194,137 @@ injury_windows <- function(metrics, injuries, before = 21) {
     mutate(days_to_injury = as.integer(date_m - date)) |>
     filter(days_to_injury >= -before, days_to_injury <= 0)
 }
+
+# =============================================================================
+# Valeurs absolues et niveau de base
+#
+# Un ACWR de 0,78 dit seulement que l'aigu est 22 % sous le chronique. Il ne
+# dit pas si la joueuse s'entraîne beaucoup ou peu. On ajoute donc :
+#   - les valeurs absolues (aiguë et chronique, en UA/jour ou en m/jour) ;
+#   - le niveau de la base : charge chronique / normale de la joueuse ;
+#   - l'ACWR sur la charge externe (course > 16 km/h, sprint > 20 km/h).
+# =============================================================================
+
+#' EWMA tolérante aux jours manquants : un NA ne met pas à jour la moyenne
+#' (la dernière valeur connue est reportée), contrairement à un 0.
+ewma_na <- function(x, span) {
+  lambda <- 2 / (span + 1)
+  out <- rep(NA_real_, length(x)); prev <- NA_real_
+  for (i in seq_along(x)) {
+    if (!is.na(x[i])) prev <- if (is.na(prev)) x[i] else lambda * x[i] + (1 - lambda) * prev
+    out[i] <- prev
+  }
+  out
+}
+
+#' Normale de la joueuse : médiane de x sur les `window` jours PRÉCÉDENTS
+#' (jours où ok est vrai), si au moins `min_n` jours sont disponibles.
+usual_level <- function(x, ok, window, min_n) {
+  ok <- coalesce(ok, FALSE) & !is.na(x)
+  vapply(seq_along(x), function(i) {
+    if (i == 1) return(NA_real_)
+    j <- max(1, i - window):(i - 1)
+    v <- x[j][ok[j]]
+    if (length(v) < min_n) NA_real_ else stats::median(v)
+  }, numeric(1))
+}
+
+base_category <- function(rel, cfg = CONFIG) {
+  dplyr::case_when(is.na(rel) ~ NA_character_,
+                   rel < cfg$base_low ~ "basse",
+                   rel > cfg$base_high ~ "haute",
+                   TRUE ~ "habituelle")
+}
+
+#' Niveau de la base sRPE : charge chronique / normale de la joueuse
+compute_base_level <- function(metrics, cfg = CONFIG) {
+  metrics |>
+    arrange(player, date) |>
+    group_by(player) |>
+    mutate(chronic_usual = usual_level(chronic_ewma, interpretable, cfg$base_window, cfg$base_min_days),
+           base_rel      = safe_div(chronic_ewma, chronic_usual),
+           base_level    = base_category(base_rel, cfg)) |>
+    ungroup()
+}
+
+#' ACWR de la charge externe (GPS), en mètres par jour.
+#' Traitement des jours sans fichier GPS, sur la période GPS de la joueuse :
+#'   - jour sans GPS ET sans charge déclarée -> 0 m (repos supposé) ;
+#'   - jour sans GPS MAIS avec une charge > 0 -> manquant (séance non captée),
+#'     la moyenne n'est pas mise à jour ce jour-là.
+#' L'ACWR GPS n'est interprétable que si au moins `min_coverage_gps` des jours
+#' actifs (charge > 0 ou GPS) des 28 derniers jours ont un fichier GPS.
+compute_external_acwr <- function(metrics, cfg = CONFIG) {
+  if (!all(c("total_km", "hsr_m", "sprint_m") %in% names(metrics))) return(metrics)
+  a <- cfg$acute_window; c <- cfg$chronic_window
+  one <- function(v, has_gps, active, in_gps) {
+    x <- ifelse(has_gps, v, ifelse(active, NA_real_, 0))
+    x[!in_gps] <- NA_real_
+    list(acute = ifelse(in_gps, ewma_na(x, a), NA_real_),
+         chronic = ifelse(in_gps, ewma_na(x, c), NA_real_))
+  }
+  metrics |>
+    arrange(player, date) |>
+    group_by(player) |>
+    mutate(
+      has_gps = !is.na(total_km),
+      in_gps  = if (any(has_gps)) date >= min(date[has_gps]) & date <= max(date[has_gps]) else FALSE,
+      active  = load > 0 | has_gps,
+      gps_day = cumsum(in_gps),
+      gps_coverage_28 = safe_div(roll_sum(as.numeric(has_gps & in_gps), c),
+                                 roll_sum(as.numeric(active & in_gps), c)),
+      gps_interpretable = in_gps & gps_day >= c & !is.na(gps_coverage_28) &
+                          gps_coverage_28 >= cfg$min_coverage_gps,
+      hsr_acute     = one(hsr_m, has_gps, active, in_gps)$acute,
+      hsr_chronic   = one(hsr_m, has_gps, active, in_gps)$chronic,
+      hsr_acwr      = safe_div(hsr_acute, hsr_chronic),
+      sprint_acute  = one(sprint_m, has_gps, active, in_gps)$acute,
+      sprint_chronic = one(sprint_m, has_gps, active, in_gps)$chronic,
+      sprint_acwr   = safe_div(sprint_acute, sprint_chronic),
+      hsr_base_rel    = safe_div(hsr_chronic, usual_level(hsr_chronic, gps_interpretable, cfg$base_window, cfg$base_min_days)),
+      sprint_base_rel = safe_div(sprint_chronic, usual_level(sprint_chronic, gps_interpretable, cfg$base_window, cfg$base_min_days))
+    ) |>
+    ungroup() |>
+    select(-has_gps, -in_gps, -active, -gps_day)
+}
+
+#' Lecture d'une alerte de charge selon le niveau de la base
+alert_context <- function(flag_high, flag_low, base_level, base_rel) {
+  pc <- ifelse(is.na(base_rel), "", sprintf(" (%d %% de sa normale)", as.integer(floor(100 * base_rel))))
+  dplyr::case_when(
+    flag_high & base_level == "basse" ~ paste0("hausse rapide depuis une base basse", pc, " : reprise à encadrer"),
+    flag_high ~ paste0("hausse rapide sur une base ", coalesce(base_level, "pas encore établie"), pc),
+    flag_low & base_level == "basse" ~ paste0("sous-exposition durable", pc),
+    flag_low ~ paste0("baisse récente depuis une base ", coalesce(base_level, "pas encore établie"), pc),
+    TRUE ~ ""
+  )
+}
+
+#' Chiffres clés « ratio et valeurs absolues » (README, rapport, tableau de bord)
+exposure_summary <- function(metrics, cfg = CONFIG) {
+  iv <- metrics |> filter(interpretable, !is.na(acwr_ewma))
+  near <- iv |> filter(acwr_ewma >= 0.75, acwr_ewma <= 0.85)
+  q <- stats::quantile(near$acute_ewma, c(.1, .5, .9), na.rm = TRUE)
+  fh <- iv |> filter(flag_acwr_high); fl <- iv |> filter(flag_acwr_low)
+  out <- list(
+    n_near_08 = nrow(near),
+    acute_near_08 = unname(round(q)),
+    high_alert_days = nrow(fh),
+    high_alert_low_base = round(mean(fh$base_level == "basse", na.rm = TRUE), 3),
+    low_alert_days = nrow(fl),
+    low_alert_low_base = round(mean(fl$base_level == "basse", na.rm = TRUE), 3)
+  )
+  if ("hsr_acwr" %in% names(metrics)) {
+    g <- metrics |> filter(interpretable, gps_interpretable, !is.na(acwr_ewma), !is.na(hsr_acwr))
+    if (nrow(g) > 30) {
+      sp <- g |> filter(hsr_acwr > cfg$acwr_high)
+      out$gps_days <- nrow(g)
+      out$gps_players <- n_distinct(g$player)
+      out$cor_srpe_hsr <- round(stats::cor(g$acwr_ewma, g$hsr_acwr), 2)
+      out$hsr_spike_days <- nrow(sp)
+      out$hsr_spike_srpe_in_zone <- round(mean(sp$acwr_ewma <= cfg$acwr_high), 3)
+      out$hsr_low_days_share <- round(mean(g$hsr_acwr < cfg$acwr_low), 3)
+    }
+  }
+  out
+}

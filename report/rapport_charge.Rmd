@@ -190,7 +190,34 @@ if (has_gps) {
 for (pl in R$example_players) { p <- fig_player_gps(m, pl); if (!is.null(p)) print(p) }
 ```
 
-## 5. Piste de recherche appliquée
+## 5. Ratio et valeurs absolues
+
+Un ACWR décrit la relation entre charge récente et charge habituelle. Il ne dit pas
+à quel niveau d'exposition elle se produit : on le lit donc avec la charge aiguë et
+chronique en valeur absolue, et avec le **niveau de la base** (charge chronique
+rapportée à la normale de la joueuse, médiane de l'année précédente).
+
+```{r results='asis'}
+E <- R$exposure
+if (!is.null(E)) {
+  cat(sprintf(paste0("- Pour un ACWR sRPE entre 0,75 et 0,85 (%s jours-joueuses), la charge aiguë va de ",
+                     "**%s à %s UA/jour** (10^e^–90^e^ percentiles).\n"),
+              format(E$n_near_08, big.mark = " "), E$acute_near_08[1], E$acute_near_08[3]))
+  cat(sprintf("- **%s** des jours d'alerte « hausse rapide » partent d'une base basse : surtout des reprises.\n", pct(E$high_alert_low_base)))
+  cat(sprintf("- **%s** des jours d'alerte « sous-charge » surviennent sur une base déjà basse : une sous-exposition durable.\n", pct(E$low_alert_low_base)))
+  if (!is.null(E$gps_days))
+    cat(sprintf(paste0("- Charge externe : sur %s jours-joueuses, l'ACWR sRPE et l'ACWR de course > 16 km/h sont ",
+                       "corrélés à r = %.2f ; dans **%s** des jours où l'ACWR de course rapide dépasse 1,5, ",
+                       "l'ACWR sRPE reste sous ce seuil.\n"),
+                format(E$gps_days, big.mark = " "), E$cor_srpe_hsr, pct(E$hsr_spike_srpe_in_zone)))
+}
+```
+
+```{r fig.height=5.5}
+p <- fig_exposure(m); if (!is.null(p)) print(p)
+```
+
+## 6. Piste de recherche appliquée
 
 **Question.** Les jours qui précèdent une blessure déclarée se distinguent-ils par
 une évolution de la charge (ACWR) ou de l'état de forme déclaré (wellness) par
@@ -223,5 +250,7 @@ if (is.null(p)) cat("_Aucune déclaration de blessure trouvée dans les données
 | ACWR | aiguë / chronique (versions glissante et EWMA) | Gabbett, 2016 ; Impellizzeri et al., 2020 |
 | Monotonie, strain | moyenne / écart-type sur 7 j ; charge hebdo × monotonie | Foster, 1998 |
 | Wellness | z-score de chaque item vs 28 jours précédents de la joueuse, moyenne des items | approche individuelle |
+| Niveau de la base | charge chronique / médiane de la charge chronique des 365 jours précédents | approche individuelle |
+| ACWR GPS | EWMA 7 j / 28 j de la course > 16 km/h et du sprint > 20 km/h (m/jour), couverture GPS ≥ 70 % | Williams et al., 2017 |
 
 Code source et paramètres : `R/00_config.R` (tous les seuils y sont modifiables).

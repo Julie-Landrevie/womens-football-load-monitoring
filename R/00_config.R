@@ -45,6 +45,19 @@ CONFIG <- list(
   # considérer l'ACWR comme interprétable
   min_coverage_chronic = 0.7,
 
+  # Valeurs absolues à côté du ratio : un même ACWR peut correspondre à des
+  # expositions très différentes. La charge chronique est comparée à la
+  # « normale » de la joueuse (médiane de sa charge chronique sur l'année
+  # précédente, jours interprétables uniquement).
+  base_window   = 365,
+  base_min_days = 28,     # nb min de jours pour établir la normale
+  base_low      = 0.75,   # base « basse » : chronique < 75 % de sa normale
+  base_high     = 1.25,   # base « haute » : chronique > 125 % de sa normale
+
+  # ACWR GPS (course > 16 km/h, sprint > 20 km/h) : part minimale des jours
+  # actifs des 28 derniers jours (charge > 0 ou GPS) qui ont un fichier GPS
+  min_coverage_gps = 0.7,
+
   # Bornes plausibles par variable (contrôle qualité). Échelles d'après
   # Midoglu et al. 2024 (Scientific Data), tableau 1.
   valid_ranges = list(

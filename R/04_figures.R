@@ -204,3 +204,37 @@ fig_player_gps <- function(metrics, player_id) {
          subtitle = "GPS STATSports 10 Hz, une barre par jour", x = NULL, y = NULL) +
     theme_perf() + theme(strip.placement = "outside", strip.text.y.left = element_text(angle = 0, hjust = 1))
 }
+
+# 8. Ratio et niveau de la base -------------------------------------------------
+# Chaque point = une joueuse un jour : ACWR (ordonnée) et charge chronique
+# rapportée à la normale de la joueuse (abscisse). Un même ratio n'a pas le
+# même sens selon que la base est basse ou haute.
+fig_exposure <- function(metrics, cfg = CONFIG) {
+  if (!"base_rel" %in% names(metrics)) return(NULL)
+  d <- metrics |> filter(interpretable, !is.na(acwr_ewma), !is.na(base_rel)) |>
+    mutate(type = case_when(flag_acwr_high ~ "Alerte hausse rapide",
+                            flag_acwr_low ~ "Alerte sous-charge",
+                            TRUE ~ "Autres jours"),
+           type = factor(type, c("Autres jours", "Alerte hausse rapide", "Alerte sous-charge")),
+           x = pmin(base_rel, 2), y = pmin(acwr_ewma, 2.5))
+  if (nrow(d) < 30) return(NULL)
+  ann <- tibble::tibble(
+    x = c(0.08, 1.95, 0.08, 1.95), y = c(2.45, 2.45, -0.1, -0.1), h = c(0, 1, 0, 1),
+    txt = c("Reprise depuis une base basse", "Hausse sur une base déjà haute",
+            "Sous-exposition durable", "Baisse depuis une base haute"))
+  ggplot(d, aes(x, y)) +
+    annotate("rect", xmin = -Inf, xmax = Inf, ymin = cfg$acwr_low, ymax = cfg$acwr_high, fill = COL$zone) +
+    geom_vline(xintercept = c(cfg$base_low, cfg$base_high), linetype = "dashed", colour = COL$ink2, linewidth = 0.3) +
+    geom_point(data = filter(d, type == "Autres jours"), colour = "grey55", alpha = 0.18, size = 0.9, stroke = 0) +
+    geom_point(data = filter(d, type != "Autres jours"), aes(colour = type), size = 1.6, alpha = 0.85) +
+    geom_text(data = ann, aes(x, y, label = txt, hjust = h), size = 3.2, colour = COL$ink2, inherit.aes = FALSE) +
+    scale_colour_manual(values = c("Alerte hausse rapide" = COL$orange, "Alerte sous-charge" = COL$blue), name = NULL) +
+    scale_x_continuous(labels = scales::percent, limits = c(0, 2)) +
+    scale_y_continuous(limits = c(-0.15, 2.5)) +
+    labs(title = "Même ACWR, exposition différente",
+         subtitle = "ACWR sRPE et niveau de la charge chronique par rapport à la normale de la joueuse (année précédente)",
+         x = "Charge chronique / normale de la joueuse", y = "ACWR (EWMA)",
+         caption = sprintf("Bande grise : zone %s–%s. Pointillés : base basse (< %s %%) et haute (> %s %%). Valeurs plafonnées pour la lisibilité.",
+                           cfg$acwr_low, cfg$acwr_high, 100 * cfg$base_low, 100 * cfg$base_high)) +
+    theme_perf()
+}

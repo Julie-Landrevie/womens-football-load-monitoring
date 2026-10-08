@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Suivi de charge — football féminin</title>
 <meta name="description" content="Tableau de bord de suivi de la charge interne, externe et du wellness de joueuses de football d'élite (données ouvertes SoccerMon).">
+<!-- Aperçu affiché quand le lien est partagé (LinkedIn, Slack, X…) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Suivi de charge — football féminin d'élite">
+<meta property="og:description" content="Charge interne et externe de 50 joueuses sur 2 saisons (données SoccerMon) : contrôle qualité, ACWR, wellness, GPS et alertes pour le staff. Pipeline R et tableau de bord interactif.">
+<meta property="og:image" content="https://julie-landrevie.github.io/womens-football-load-monitoring/preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:url" content="https://julie-landrevie.github.io/womens-football-load-monitoring/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="author" content="Julie Landrevie">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
@@ -131,6 +141,18 @@ tbody tr:last-child td { border-bottom: 0; }
 .sw.zone { height: 10px; width: 14px; border-radius: 2px; background: var(--zone); border: 1px solid var(--line); }
 
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 6px 12px; min-height: 34px; cursor: pointer; color: var(--ink-2); font-weight: 600; font-size: 0.9rem; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--pitch-soft); color: var(--ink); }
+.seg button:disabled { opacity: 0.45; cursor: not-allowed; }
+.metric-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 18px 0 0; }
+table.expo tbody tr { cursor: default; }
+table.expo tbody tr:hover { background: none; }
+table.expo td.read { white-space: normal; min-width: 220px; color: var(--ink-2); }
+.lvl { font-size: 0.8rem; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.lvl.basse { border-color: var(--s-blue); }
+.lvl.haute { border-color: var(--s-orange); }
 .prose { max-width: 75ch; }
 .prose h3 { font-size: 1.1rem; margin: 22px 0 4px; }
 .prose p, .prose li { color: var(--ink); }
@@ -191,6 +213,10 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
     <p class="hint" id="team-state-hint">Dernières valeurs connues de chaque joueuse. Cliquez sur une ligne pour ouvrir son suivi.</p>
     <div class="table-wrap"><table id="state-table"></table></div>
 
+    <h2>Ratio et niveau de la base</h2>
+    <p class="hint">Un même ACWR n'a pas le même sens selon le niveau de charge habituel. Abscisse : charge chronique rapportée à la normale de la joueuse (médiane de l'année précédente). Ordonnée : ACWR sRPE. Dernier jour documenté de chaque joueuse ; cliquez sur un point pour l'ouvrir.</p>
+    <div class="panel"><div id="team-quad" class="chart"></div></div>
+
     <h2>Charge hebdomadaire</h2>
     <p class="hint">sRPE cumulée par semaine. Case vide : aucun jour documenté. Cliquez sur une case pour ouvrir la joueuse.</p>
     <div class="panel"><div id="team-heatmap" class="chart"></div></div>
@@ -206,22 +232,35 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
     </div>
     <div class="kpis" id="player-kpis"></div>
 
-    <div class="charts-stack" style="margin-top:16px">
+    <h2>Ratio et valeurs absolues</h2>
+    <p class="hint" id="expo-hint">Le ratio dit comment la charge récente se compare à l'habitude ; les valeurs absolues disent à quel niveau d'exposition cela se produit.</p>
+    <div class="table-wrap"><table class="expo" id="expo-table"></table></div>
+
+    <div class="metric-bar">
+      <span class="muted">Indicateur des graphiques</span>
+      <div class="seg" id="metric-seg" role="group" aria-label="Indicateur affiché">
+        <button type="button" data-metric="srpe" aria-pressed="true">Charge perçue (sRPE)</button>
+        <button type="button" data-metric="hsr" aria-pressed="false">Course &gt; 16 km/h</button>
+        <button type="button" data-metric="spr" aria-pressed="false">Sprint &gt; 20 km/h</button>
+      </div>
+    </div>
+
+    <div class="charts-stack" style="margin-top:12px">
       <div class="panel">
-        <p class="chart-title">Charge interne</p>
+        <p class="chart-title" id="load-title">Charge interne</p>
         <div class="legend-inline">
-          <span><i class="sw bar" style="background:var(--s-blue-light)"></i>Charge du jour (sRPE)</span>
+          <span><i class="sw bar" style="background:var(--s-blue-light)"></i><span id="load-legend-day">Charge du jour (sRPE)</span></span>
           <span><i class="sw" style="background:var(--s-blue)"></i>Aiguë, EWMA 7 j</span>
           <span><i class="sw" style="background:var(--s-orange)"></i>Chronique, EWMA 28 j</span>
         </div>
         <div id="p-load" class="chart"></div>
       </div>
       <div class="panel">
-        <p class="chart-title">Rapport aigu / chronique (ACWR)</p>
+        <p class="chart-title" id="acwr-title">Rapport aigu / chronique (ACWR)</p>
         <div class="legend-inline">
           <span><i class="sw zone"></i>Zone de référence</span>
-          <span><i class="sw dot" style="background:var(--alert)"></i>Alerte : hors zone 3 jours de suite, à l'écart de l'équipe</span>
-          <span class="muted">Courbe masquée quand moins de 70 % des 28 derniers jours sont documentés</span>
+          <span id="acwr-legend-alert"><i class="sw dot" style="background:var(--alert)"></i>Alerte : hors zone 3 jours de suite, à l'écart de l'équipe</span>
+          <span class="muted" id="acwr-legend-mask">Courbe masquée quand moins de 70 % des 28 derniers jours sont documentés</span>
         </div>
         <div id="p-acwr" class="chart"></div>
       </div>
@@ -287,6 +326,10 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
       <div class="panel"><p class="chart-title">Wellness (z-score)</p><p class="chart-sub">Médiane et intervalle interquartile</p><div id="r-well" class="chart"></div></div>
     </div>
     <div class="prose" id="research-text"></div>
+    <div id="expo-block" hidden>
+      <h2>Même ACWR, exposition différente</h2>
+      <div class="prose" id="expo-text"></div>
+    </div>
     <div id="ie-block" hidden>
       <h2>Charge interne et charge externe</h2>
       <p class="hint" id="ie-hint"></p>
@@ -304,6 +347,8 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
       <dt>Charge du jour (sRPE)</dt><dd>Effort perçu (1 à 10) × durée de la séance en minutes, cumulé sur la journée. En unités arbitraires (UA).</dd>
       <dt>Charge aiguë et chronique</dt><dd>Moyennes exponentielles sur 7 et 28 jours (EWMA) : elles donnent plus de poids aux jours récents qu'une moyenne simple.</dd>
       <dt>ACWR</dt><dd>Aiguë ÷ chronique. Autour de 1 : charge habituelle. La zone 0,8–1,5 sert de repère de progressivité, pas de prédicteur de blessure (débat ouvert dans la littérature).</dd>
+      <dt>Valeurs absolues et niveau de la base</dt><dd>À côté de chaque ACWR : charge aiguë et chronique en valeur absolue (UA/jour pour le sRPE, mètres/jour pour le GPS), et charge chronique rapportée à la normale de la joueuse (médiane de sa charge chronique sur l'année précédente). Base basse sous 75 %, haute au-dessus de 125 %. Un ACWR de 0,78 n'a pas le même sens à 60 % ou à 110 % de la normale.</dd>
+      <dt>ACWR de la charge externe</dt><dd>Même calcul (EWMA 7 j / 28 j) sur la distance de course au-dessus de 16 km/h et de sprint au-dessus de 20 km/h. Un jour sans GPS ni charge déclarée compte 0 m (repos) ; un jour sans GPS mais avec une charge déclarée est manquant (séance non captée). Ratio affiché seulement si au moins 70 % des jours actifs des 28 derniers jours ont un fichier GPS.</dd>
       <dt>Monotonie</dt><dd>Moyenne ÷ écart-type de la charge sur 7 jours. Au-dessus de 2 : peu de variation d'un jour à l'autre.</dd>
       <dt>Wellness</dt><dd>Fatigue, humeur, disponibilité, sommeil, douleurs et stress, chacun comparé aux 28 jours précédents de la même joueuse (z-score), puis moyennés.</dd>
     </dl>
@@ -314,6 +359,7 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
       <li>Persistance : une alerte de charge (ACWR, monotonie) n'apparaît qu'au 3<sup>e</sup> jour consécutif hors zone, pour ignorer les oscillations d'un jour.</li>
       <li>Les alertes sont comptées en épisodes : plusieurs jours d'alerte consécutifs forment un seul épisode. L'objectif est un nombre d'alertes qu'un staff peut réellement traiter.</li>
       <li>Wellness : alerte sous −1,5 écart-type par rapport à la normale de la joueuse.</li>
+      <li>Chaque alerte de charge est lue avec le niveau de la base : une hausse rapide depuis une base basse est une reprise à encadrer, une sous-charge sur une base basse est une sous-exposition durable.</li>
     </ul>
     <h3>Limites</h3>
     <ul>
@@ -387,7 +433,31 @@ function baseLayout(extra) {
 const plot = (el, data, layout) => { if (window.Plotly) Plotly.react(el, data, layout, PCONF); };
 
 /* ---------- état ---------- */
-const state = { team: D.teams[0], from: allFirst, to: allLast, player: null, view: "team", sort: { key: "alerts", dir: -1 } };
+const state = { team: D.teams[0], from: allFirst, to: allLast, player: null, view: "team", sort: { key: "alerts", dir: -1 }, metric: "srpe" };
+const BASE_LOW = T.base_low ?? 0.75, BASE_HIGH = T.base_high ?? 1.25;
+
+// indicateurs affichables : séries du jour, aiguë, chronique, ACWR, niveau de base
+const METRICS = {
+  srpe: { name: "Charge perçue (sRPE)", unit: "UA/j", dayUnit: "UA", day: "load", a: "acute", c: "chronic", r: "acwr", base: "base", dec: 0,
+          title: "Charge interne (sRPE)", dayLbl: "Charge du jour (sRPE)" },
+  hsr:  { name: "Course > 16 km/h", unit: "m/j", dayUnit: "m", day: "gps_hsr", a: "hsr_a", c: "hsr_c", r: "hsr_acwr", base: "hsr_base", dec: 0,
+          title: "Charge externe : course au-dessus de 16 km/h", dayLbl: "Distance du jour > 16 km/h" },
+  spr:  { name: "Sprint > 20 km/h", unit: "m/j", dayUnit: "m", day: "gps_sprint", a: "spr_a", c: "spr_c", r: "spr_acwr", base: "spr_base", dec: 0,
+          title: "Charge externe : sprint au-dessus de 20 km/h", dayLbl: "Distance du jour > 20 km/h" }
+};
+const hasMetric = (s, k) => k === "srpe" || (s[METRICS[k].r] && s[METRICS[k].a]);
+const baseLevel = (b) => b == null ? null : b < BASE_LOW ? "basse" : b > BASE_HIGH ? "haute" : "habituelle";
+const baseTag = (b) => b == null ? '<span class="muted">—</span>' : `<span class="lvl ${baseLevel(b)}" title="Charge chronique / normale de la joueuse">${pct(b)} · ${baseLevel(b)}</span>`;
+const gapTxt = (r) => r == null ? "—" : (r >= 1 ? "+" : "−") + Math.abs(Math.round((r - 1) * 100)) + "\u00a0%";
+// lecture d'un ratio selon le niveau de la base
+function readRatio(r, b) {
+  if (r == null) return "Non interprétable (données insuffisantes)";
+  const lv = baseLevel(b);
+  if (r > T.acwr_high) return lv === "basse" ? "Hausse rapide depuis une base basse : reprise à encadrer" : lv === "haute" ? "Hausse rapide sur une base déjà haute : vigilance" : "Hausse rapide";
+  if (r < T.acwr_low) return lv === "basse" ? "Sous-exposition durable" : lv === "haute" ? "Baisse depuis une base haute (coupure, affûtage ?)" : "Baisse récente";
+  return lv === "basse" ? "Progression régulière, mais à un niveau bas pour elle" : lv === "haute" ? "Charge stable à un niveau élevé pour elle" : "Charge habituelle";
+}
+const lastIdx = (arr, i0, i1) => { if (!arr) return -1; for (let j = i1; j >= i0; j--) if (arr[j] != null) return j; return -1; };
 
 // indice d'une date dans la série d'une joueuse
 function range(id) {
@@ -422,7 +492,8 @@ function endState(id) {
     if (s.flags[j]) { alertDays++; if (j === i0 || !s.flags[j - 1]) alerts++; }
     if (s.doc[j]) docd++;
   }
-  return { date: addDays(s.start, k), load7, acwr: s.acwr[k], acwrRaw: s.acwr_raw[k], well, cov: s.cov[k],
+  return { date: addDays(s.start, k), k, load7, acwr: s.acwr[k], acwrRaw: s.acwr_raw[k], well, cov: s.cov[k],
+           base: s.base ? s.base[k] : null, acute: s.acute[k], chronic: s.chronic[k],
            flags7, alerts, alertDays, docShare: docd / (i1 - i0 + 1), days: i1 - i0 + 1 };
 }
 
@@ -451,6 +522,7 @@ function renderTeam() {
     { key: "date", label: "Dernier jour", cls: "" },
     { key: "load7", label: "Charge 7 j (UA)", cls: "r" },
     { key: "acwr", label: "ACWR", cls: "r" },
+    { key: "base", label: "Base / normale", cls: "r" },
     { key: "well", label: "Wellness (z)", cls: "r" },
     { key: "cov", label: "Jours documentés (28 j)", cls: "r" },
     { key: "flags7", label: "Points d'attention (7 j)" },
@@ -470,12 +542,35 @@ function renderTeam() {
       <td>${frDate(r.date)}</td>
       <td class="r">${nf(r.load7)}</td>
       <td class="r">${r.acwr != null ? nf(r.acwr, 2) : '<span class="muted" title="Couverture insuffisante pour interpréter">' + nf(r.acwrRaw, 2) + "*</span>"}</td>
+      <td class="r">${baseTag(r.base)}</td>
       <td class="r">${nf(r.well, 1)}</td>
       <td class="r">${pct(r.cov)}</td>
       <td>${flagChips(r.flags7)}</td>
       <td class="r" title="${r.alertDays} jours avec alerte">${r.alerts}</td></tr>`).join("") + "</tbody>";
   $("#state-table").innerHTML = head + body;
   $("#team-state-hint").textContent = "Dernières valeurs connues de chaque joueuse. * ACWR non interprétable (moins de 70 % des 28 derniers jours documentés). Cliquez sur une ligne pour ouvrir le suivi de la joueuse.";
+
+  // ratio et niveau de la base (dernier jour documenté)
+  const qd = rows.filter((r) => r.acwr != null && r.base != null);
+  const xMax = Math.max(1.6, ...qd.map((r) => r.base)) + 0.1, yMax = Math.max(2, ...qd.map((r) => r.acwr)) + 0.15;
+  const corner = (x, y, t, xa, ya) => ({ x, y, text: t, showarrow: false, xanchor: xa, yanchor: ya, font: { size: 12, color: css("--ink-3") } });
+  plot("team-quad", [{
+    type: "scatter", mode: "markers+text", x: qd.map((r) => r.base), y: qd.map((r) => r.acwr), text: qd.map((r) => r.id),
+    textposition: "top center", textfont: { family: "Barlow Semi Condensed", size: 12, color: css("--ink-2") },
+    customdata: qd.map((r) => [nf(r.acute), nf(r.chronic), readRatio(r.acwr, r.base)]),
+    marker: { size: 10, color: qd.map((r) => (r.flags7 & 3) ? css("--alert") : css("--s-blue")), line: { color: css("--surface"), width: 1.5 } },
+    hovertemplate: "<b>%{text}</b><br>ACWR %{y:.2f} · base %{x:.0%} de sa normale<br>Aiguë %{customdata[0]} UA/j · chronique %{customdata[1]} UA/j<br>%{customdata[2]}<extra></extra>"
+  }], baseLayout({ height: 380, hovermode: "closest",
+    shapes: [
+      { type: "rect", xref: "paper", x0: 0, x1: 1, y0: T.acwr_low, y1: T.acwr_high, fillcolor: css("--zone"), line: { width: 0 }, layer: "below" },
+      { type: "line", x0: BASE_LOW, x1: BASE_LOW, yref: "paper", y0: 0, y1: 1, line: { color: css("--ink-3"), width: 1, dash: "dot" } },
+      { type: "line", x0: BASE_HIGH, x1: BASE_HIGH, yref: "paper", y0: 0, y1: 1, line: { color: css("--ink-3"), width: 1, dash: "dot" } }],
+    annotations: [corner(0.02, yMax, "Reprise depuis une base basse", "left", "top"), corner(xMax - 0.02, yMax, "Hausse sur une base haute", "right", "top"),
+      corner(0.02, 0.02, "Sous-exposition durable", "left", "bottom"), corner(xMax - 0.02, 0.02, "Baisse depuis une base haute", "right", "bottom")],
+    xaxis: { title: { text: "Charge chronique / normale de la joueuse" }, tickformat: ".0%", range: [0, xMax], gridcolor: css("--line"), zeroline: false },
+    yaxis: { title: { text: "ACWR (sRPE)" }, range: [0, yMax], gridcolor: css("--line"), zeroline: false } }));
+  const tq = document.getElementById("team-quad");
+  if (window.Plotly && tq.on && !tq._click) { tq._click = true; tq.on("plotly_click", (ev) => { const p = ev.points && ev.points[0]; if (p) openPlayer(p.text); }); }
 
   // carte de chaleur
   const blues = [[0, css("--seq-0")], [0.25, css("--seq-1")], [0.5, css("--seq-2")], [0.75, css("--seq-3")], [1, css("--seq-4")]];
@@ -532,25 +627,59 @@ function renderPlayer() {
   ].join("");
 
   const [i0, i1] = r;
-  const dates = [], load = [], acute = [], chronic = [], acwr = [], well = [], fx = [], fy = [], ftxt = [];
+
+  // ratio et valeurs absolues
+  const expoRows = Object.entries(METRICS).filter(([k]) => hasMetric(s, k)).map(([k, M]) => {
+    const j = k === "srpe" ? es.k : lastIdx(s[M.r], i0, i1);
+    if (j < 0) return `<tr><td>${M.name}</td><td colspan="6" class="muted">Couverture GPS insuffisante sur la période</td><td></td></tr>`;
+    const rr = s[M.r][j], b = s[M.base] ? s[M.base][j] : null;
+    return `<tr><td>${M.name}</td><td>${frDate(addDays(s.start, j))}</td>
+      <td class="r">${nf(s[M.a][j], M.dec)} <span class="muted">${M.unit}</span></td>
+      <td class="r">${nf(s[M.c][j], M.dec)} <span class="muted">${M.unit}</span></td>
+      <td class="r"><strong>${rr != null ? nf(rr, 2) : "—"}</strong></td>
+      <td class="r">${gapTxt(rr)}</td><td class="r">${baseTag(b)}</td><td class="read">${readRatio(rr, b)}</td></tr>`;
+  });
+  $("#expo-table").innerHTML = "<thead><tr><th>Indicateur</th><th>Au</th><th class='r'>Aiguë (7 j)</th><th class='r'>Chronique (28 j)</th><th class='r'>ACWR</th><th class='r'>Aigu vs chronique</th><th class='r'>Base / normale</th><th>Lecture</th></tr></thead><tbody>" + expoRows.join("") + "</tbody>";
+  if (es.acwr != null) {
+    const g = Math.round((es.acwr - 1) * 100);
+    $("#expo-hint").innerHTML = `Au ${frDate(es.date)} : charge aiguë ${nf(es.acute)} UA/jour, chronique ${nf(es.chronic)} UA/jour, ACWR ${nf(es.acwr, 2)}. L'exposition récente est ${Math.abs(g)}&nbsp;% ${g < 0 ? "sous" : "au-dessus de"} sa base chronique` +
+      (es.base != null ? `, elle-même à ${pct(es.base)} de la normale de la joueuse.` : ".") + " Le ratio décrit la relation entre récent et habituel ; les valeurs absolues disent à quel niveau d'exposition elle se produit.";
+  } else {
+    $("#expo-hint").textContent = "Le ratio décrit la relation entre récent et habituel ; les valeurs absolues disent à quel niveau d'exposition elle se produit.";
+  }
+
+  // indicateur affiché dans les graphiques
+  document.querySelectorAll("#metric-seg button").forEach((b) => { b.disabled = !hasMetric(s, b.dataset.metric); });
+  if (!hasMetric(s, state.metric)) state.metric = "srpe";
+  document.querySelectorAll("#metric-seg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.metric === state.metric));
+  const M = METRICS[state.metric], isS = state.metric === "srpe";
+  $("#load-title").textContent = M.title;
+  $("#load-legend-day").textContent = M.dayLbl;
+  $("#acwr-title").textContent = "Rapport aigu / chronique (ACWR) — " + M.name;
+  $("#acwr-legend-alert").hidden = !isS;
+  $("#acwr-legend-mask").textContent = isS ? "Courbe masquée quand moins de 70 % des 28 derniers jours sont documentés"
+    : "Courbe masquée quand moins de 70 % des jours actifs des 28 derniers jours ont un fichier GPS ; pas d'alerte sur cet indicateur";
+
+  const dates = [], load = [], acute = [], chronic = [], acwr = [], base = [], well = [], fx = [], fy = [], ftxt = [];
   for (let j = i0; j <= i1; j++) {
     const d = addDays(s.start, j); dates.push(d);
-    load.push(s.load[j] || null); acute.push(s.acute[j]); chronic.push(s.chronic[j]);
-    acwr.push(s.acwr[j]); well.push(s.well[j]);
-    if (s.flags[j] & 3) { fx.push(d); fy.push(s.acwr[j] ?? s.acwr_raw[j]); ftxt.push(s.flags[j] & 1 ? "Hausse rapide" : "Sous-charge"); }
+    load.push(s[M.day][j] || null); acute.push(s[M.a][j]); chronic.push(s[M.c][j]);
+    acwr.push(s[M.r][j]); well.push(s.well[j]);
+    base.push(s[M.base] && s[M.base][j] != null ? pct(s[M.base][j]) : "—");
+    if (isS && (s.flags[j] & 3)) { fx.push(d); fy.push(s.acwr[j] ?? s.acwr_raw[j]); ftxt.push(s.flags[j] & 1 ? "Hausse rapide" : "Sous-charge"); }
   }
   const xr = [dates[0], dates[dates.length - 1]];
   const blue = css("--s-blue"), orange = css("--s-orange"), alert = css("--alert");
 
   plot("p-load", [
-    { type: "bar", x: dates, y: load, name: "Charge du jour", marker: { color: css("--s-blue-light") }, hovertemplate: "%{y:,.0f} UA" },
-    { type: "scatter", mode: "lines", x: dates, y: acute, name: "Aiguë (7 j)", line: { color: blue, width: 2 }, hovertemplate: "%{y:,.0f} UA" },
-    { type: "scatter", mode: "lines", x: dates, y: chronic, name: "Chronique (28 j)", line: { color: orange, width: 2 }, hovertemplate: "%{y:,.0f} UA" }
-  ], baseLayout({ height: 280, bargap: 0.15, xaxis: Object.assign(baseLayout().xaxis, { range: xr }), yaxis: Object.assign(baseLayout().yaxis, { title: { text: "UA" }, rangemode: "tozero" }) }));
+    { type: "bar", x: dates, y: load, name: "Jour", marker: { color: css("--s-blue-light") }, hovertemplate: "%{y:,.0f} " + M.dayUnit },
+    { type: "scatter", mode: "lines", x: dates, y: acute, name: "Aiguë (7 j)", line: { color: blue, width: 2 }, connectgaps: false, hovertemplate: "%{y:,.0f} " + M.unit },
+    { type: "scatter", mode: "lines", x: dates, y: chronic, name: "Chronique (28 j)", line: { color: orange, width: 2 }, connectgaps: false, hovertemplate: "%{y:,.0f} " + M.unit }
+  ], baseLayout({ height: 280, bargap: 0.15, xaxis: Object.assign(baseLayout().xaxis, { range: xr }), yaxis: Object.assign(baseLayout().yaxis, { title: { text: M.dayUnit }, rangemode: "tozero" }) }));
 
   const yMax = Math.max(2, ...acwr.filter((v) => v != null));
   plot("p-acwr", [
-    { type: "scatter", mode: "lines", x: dates, y: acwr, name: "ACWR", line: { color: css("--ink-2"), width: 1.6 }, connectgaps: false, hovertemplate: "%{y:.2f}" },
+    { type: "scatter", mode: "lines", x: dates, y: acwr, name: "ACWR", customdata: base, line: { color: css("--ink-2"), width: 1.6 }, connectgaps: false, hovertemplate: "%{y:.2f} · base %{customdata} de sa normale" },
     { type: "scatter", mode: "markers", x: fx, y: fy, text: ftxt, name: "Alerte", marker: { color: alert, size: 8, line: { color: css("--surface"), width: 1.5 } }, hovertemplate: "%{text}" }
   ], baseLayout({ height: 230,
     shapes: [{ type: "rect", xref: "paper", x0: 0, x1: 1, y0: T.acwr_low, y1: T.acwr_high, fillcolor: css("--zone"), line: { width: 0 }, layer: "below" }],
@@ -641,8 +770,19 @@ function renderInternalExternal() {
       xaxis: { title: { text: "Distance totale (km)" }, gridcolor: css("--line"), zeroline: false },
       yaxis: { title: { text: "sRPE (UA)" }, gridcolor: css("--line"), zeroline: false } }));
 }
+function renderExposure() {
+  const E = D.exposure;
+  $("#expo-block").hidden = !E;
+  if (!E) return;
+  let h = `<p>Pour un ACWR sRPE autour de 0,8 (${nf(E.n_near_08)} jours-joueuses entre 0,75 et 0,85), la charge aiguë va de <strong>${nf(E.acute_near_08[0])} à ${nf(E.acute_near_08[2])} UA par jour</strong> (10<sup>e</sup> et 90<sup>e</sup> percentiles) : le même ratio recouvre des expositions qui varient du simple au double.</p>
+    <p><strong>${pct(E.high_alert_low_base)}</strong> des jours d'alerte « hausse rapide » partent d'une base basse (moins de ${Math.round(BASE_LOW * 100)} % de la normale de la joueuse) : ce sont surtout des reprises. <strong>${pct(E.low_alert_low_base)}</strong> des jours d'alerte « sous-charge » ont lieu sur une base déjà basse : une sous-exposition qui dure plus qu'un creux passager. Le staff ne répond pas de la même façon à ces situations, d'où le contexte ajouté à chaque alerte.</p>`;
+  if (E.gps_days) h += `<p><strong>Charge externe.</strong> Sur ${nf(E.gps_days)} jours-joueuses où les deux ratios sont interprétables (${E.gps_players} joueuses), l'ACWR sRPE et l'ACWR de course au-dessus de 16 km/h ne sont que modérément corrélés (r = ${nf(E.cor_srpe_hsr, 2)}). Dans <strong>${pct(E.hsr_spike_srpe_in_zone)}</strong> des ${nf(E.hsr_spike_days)} jours où l'ACWR de course rapide dépasse ${nf(T.acwr_high, 1)}, l'ACWR sRPE reste sous ce seuil : la charge perçue seule ne voit pas ces pics de course à haute intensité.</p>`;
+  h += `<p class="muted">Lecture descriptive. Le niveau de base est comparé à la médiane de l'année précédente de chaque joueuse ; les seuils de 75 % et 125 % sont des repères à discuter avec le staff.</p>`;
+  $("#expo-text").innerHTML = h;
+}
 function renderResearch() {
   renderInternalExternal();
+  renderExposure();
   const pr = D.injury_profile;
   if (!pr) { $("#research-text").innerHTML = '<p class="empty">Aucune déclaration de blessure dans les données chargées.</p>'; return; }
   const band = (q1, q3, med, color, fmt) => [
@@ -711,6 +851,7 @@ $("#state-table").addEventListener("click", (e) => {
 $("#state-table").addEventListener("keydown", (e) => { const tr = e.target.closest("tr[data-player]"); if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openPlayer(tr.dataset.player); } });
 $("#f-player").addEventListener("change", (e) => { state.player = e.target.value; renderPlayer(); location.hash = "joueuse=" + state.player; });
 function step(d) { const ps = teamPlayers(); const i = ps.findIndex((p) => p.id === state.player); state.player = ps[(i + d + ps.length) % ps.length].id; renderPlayer(); location.hash = "joueuse=" + state.player; }
+$("#metric-seg").addEventListener("click", (e) => { const b = e.target.closest("button[data-metric]"); if (b && !b.disabled) { state.metric = b.dataset.metric; renderPlayer(); } });
 $("#prev-player").addEventListener("click", () => step(-1));
 $("#next-player").addEventListener("click", () => step(1));
 $("#theme").addEventListener("click", () => {

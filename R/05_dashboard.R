@@ -50,12 +50,28 @@ export_dashboard <- function(res, out_dir = "docs") {
         doc     = I(as.integer(d$load_reported)),
         flags   = I(d$flags)
       )
+      # niveau de la base : charge chronique / normale de la joueuse
+      if ("base_rel" %in% names(d)) out$base <- I(rnd(d$base_rel, 2))
       if ("total_km" %in% names(d)) {
         dd <- d
         out$gps_km     <- I(rnd(dd$total_km, 2))
         out$gps_hsr    <- I(rnd(dd$hsr_m, 0))
         out$gps_sprint <- I(rnd(dd$sprint_m, 0))
         out$gps_acc    <- I(rnd(dd$n_acc, 0))
+      }
+      # ACWR GPS : valeurs absolues (m/jour) et ratio, masqués si couverture insuffisante
+      # (sinon les jours de repos seuls font chuter les moyennes quand le GPS n'est pas porté)
+      if ("hsr_acwr" %in% names(d)) {
+        gi <- coalesce(d$gps_interpretable, FALSE)
+        out$hsr_a    <- I(rnd(ifelse(gi, d$hsr_acute, NA), 0))
+        out$hsr_c    <- I(rnd(ifelse(gi, d$hsr_chronic, NA), 0))
+        out$hsr_acwr <- I(rnd(ifelse(gi, d$hsr_acwr, NA), 2))
+        out$hsr_base <- I(rnd(ifelse(gi, d$hsr_base_rel, NA), 2))
+        out$spr_a    <- I(rnd(ifelse(gi, d$sprint_acute, NA), 1))
+        out$spr_c    <- I(rnd(ifelse(gi, d$sprint_chronic, NA), 1))
+        out$spr_acwr <- I(rnd(ifelse(gi, d$sprint_acwr, NA), 2))
+        out$spr_base <- I(rnd(ifelse(gi, d$sprint_base_rel, NA), 2))
+        out$gps_cov  <- I(rnd(d$gps_coverage_28, 2))
       }
       out
     })
@@ -100,7 +116,9 @@ export_dashboard <- function(res, out_dir = "docs") {
       thresholds = list(acwr_low = res$config$acwr_low, acwr_high = res$config$acwr_high,
                         monotony_high = res$config$monotony_high,
                         wellness_z = res$config$wellness_z_alert,
-                        min_coverage = res$config$min_coverage_chronic),
+                        min_coverage = res$config$min_coverage_chronic,
+                        base_low = res$config$base_low, base_high = res$config$base_high,
+                        min_coverage_gps = res$config$min_coverage_gps),
       has_gps = "total_km" %in% names(m)
     ),
     teams = sort(unique(players$team)),
@@ -114,7 +132,8 @@ export_dashboard <- function(res, out_dir = "docs") {
     ),
     injury_profile = prof,
     gps_qc = res$gps_qc,
-    internal_external = ie
+    internal_external = ie,
+    exposure = res$exposure
   )
 
   js <- paste0("// Généré par run_pipeline.R — ne pas modifier à la main\nwindow.DASHBOARD_DATA = ",

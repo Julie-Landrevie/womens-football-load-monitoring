@@ -39,7 +39,8 @@ message("3/5 Indicateurs de charge et wellness")
 metrics <- wide |>
   compute_load_metrics() |>
   compute_wellness_z() |>
-  compute_flags()
+  compute_flags() |>
+  compute_base_level()
 # Charge externe (GPS) : table journalière produite une fois par run_gps.R
 gps_daily <- load_gps_daily()
 gps_qc <- NULL
@@ -52,6 +53,11 @@ if (!is.null(gps_daily)) {
 } else {
   message("   GPS : pas de data/processed/gps_daily.csv (lancer run_gps.R pour l'ajouter)")
 }
+# ACWR de la charge externe (course > 16 km/h, sprint > 20 km/h), en m/jour
+metrics  <- compute_external_acwr(metrics)
+exposure <- exposure_summary(metrics)
+message("   Ratio et valeurs absolues (chiffres du README, résultat 6) :")
+for (k in names(exposure)) message("     ", k, " = ", paste(exposure[[k]], collapse = " / "))
 consistency <- qc_consistency(metrics)
 weekly      <- weekly_summary(metrics)
 inj_win     <- injury_windows(metrics, injuries)
@@ -59,7 +65,12 @@ inj_win     <- injury_windows(metrics, injuries)
 alerts <- metrics |>
   filter(n_flags > 0) |>
   transmute(team, joueuse = label, player, date,
-            acwr_ewma = round(acwr_ewma, 2), monotony = round(monotony_calc, 2),
+            acwr_ewma = round(acwr_ewma, 2),
+            charge_aigue_UA_j = round(acute_ewma), charge_chronique_UA_j = round(chronic_ewma),
+            ecart_aigu_chronique = sprintf("%+d %%", round(100 * (acwr_ewma - 1))),
+            base_vs_normale = ifelse(is.na(base_rel), NA, sprintf("%d %%", as.integer(floor(100 * base_rel)))),
+            contexte = alert_context(flag_acwr_high, flag_acwr_low, base_level, base_rel),
+            monotony = round(monotony_calc, 2),
             wellness_z = round(wellness_z, 2),
             motifs = paste0(
               ifelse(flag_acwr_high, "charge en hausse rapide; ", ""),
@@ -77,6 +88,9 @@ write_csv(zero_runs,    file.path(out_tab, "qc_plages_sans_charge.csv"))
 write_csv(metrics,      file.path(out_tab, "indicateurs_journaliers.csv"))
 write_csv(weekly,       file.path(out_tab, "synthese_hebdomadaire.csv"))
 write_csv(alerts,       file.path(out_tab, "points_attention.csv"))
+write_csv(tibble::enframe(lapply(exposure, paste, collapse = " / "), name = "indicateur", value = "valeur") |>
+            mutate(valeur = unlist(valeur)),
+          file.path(out_tab, "ratio_valeurs_absolues.csv"))
 
 save_fig <- function(p, name, w = 9, h = 6) {
   if (!is.null(p)) ggsave(file.path(out_fig, name), p, width = w, height = h, dpi = 150, bg = "white")
@@ -95,6 +109,7 @@ for (pl in example_players) {
 }
 save_fig(fig_injury_profile(inj_win), "05_profil_pre_blessure.png", h = 4.5)
 save_fig(fig_internal_external(metrics), "06_interne_externe.png", w = 10, h = 5)
+save_fig(fig_exposure(metrics), "08_ratio_et_base.png", w = 10, h = 5.5)
 for (pl in example_players) save_fig(fig_player_gps(metrics, pl), paste0("07_gps_", player_label(metrics, pl), ".png"), h = 6)
 
 saveRDS(list(daily_long = daily_long, injuries = injuries, metrics = metrics,
@@ -102,6 +117,7 @@ saveRDS(list(daily_long = daily_long, injuries = injuries, metrics = metrics,
              duplicates = duplicates, summary_qc = summary_qc, zero_runs = zero_runs,
              consistency = consistency, weekly = weekly, alerts = alerts,
              inj_win = inj_win, example_players = example_players, gps_qc = gps_qc,
+             exposure = exposure,
              config = CONFIG, data_dir = CONFIG$data_dir),
         file.path(CONFIG$output_dir, "pipeline.rds"))
 
@@ -113,6 +129,7 @@ save_doc(fig_team_weekly(weekly, sort(unique(weekly$team))[1]), "charge_hebdo_eq
 save_doc(fig_injury_profile(inj_win), "profil_pre_blessure.png", 9, 4.5)
 save_doc(fig_qc_completeness(completeness), "qc_completude.png", 9, 10)
 save_doc(fig_internal_external(metrics), "interne_externe.png", 10, 5)
+save_doc(fig_exposure(metrics), "ratio_et_base.png", 10, 5.5)
 
 message("   Tableau de bord web")
 export_dashboard(readRDS(file.path(CONFIG$output_dir, "pipeline.rds")), out_dir = "docs")
