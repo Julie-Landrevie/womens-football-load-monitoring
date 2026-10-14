@@ -55,8 +55,8 @@ export_dashboard <- function(res, out_dir = "docs") {
       if ("total_km" %in% names(d)) {
         dd <- d
         out$gps_km     <- I(rnd(dd$total_km, 2))
-        out$gps_hsr    <- I(rnd(dd$hsr_m, 0))
-        out$gps_sprint <- I(rnd(dd$sprint_m, 0))
+        out$gps_hsr    <- I(rnd(dd$gps_hi_m, 0))
+        out$gps_sprint <- I(rnd(dd$gps_sprint_m, 0))
         out$gps_acc    <- I(rnd(dd$n_acc, 0))
       }
       # ACWR GPS : valeurs absolues (m/jour) et ratio, masqués si couverture insuffisante
@@ -119,7 +119,8 @@ export_dashboard <- function(res, out_dir = "docs") {
                         min_coverage = res$config$min_coverage_chronic,
                         base_low = res$config$base_low, base_high = res$config$base_high,
                         min_coverage_gps = res$config$min_coverage_gps),
-      has_gps = "total_km" %in% names(m)
+      has_gps = "total_km" %in% names(m),
+      gps_labels = res$gps_labels
     ),
     teams = sort(unique(players$team)),
     players = players,
@@ -133,7 +134,9 @@ export_dashboard <- function(res, out_dir = "docs") {
     injury_profile = prof,
     gps_qc = res$gps_qc,
     internal_external = ie,
-    exposure = res$exposure
+    exposure = res$exposure,
+    returns = export_returns(res$returns),
+    thresholds = export_thresholds(res$thresholds)
   )
 
   js <- paste0("// Généré par run_pipeline.R — ne pas modifier à la main\nwindow.DASHBOARD_DATA = ",
@@ -143,4 +146,34 @@ export_dashboard <- function(res, out_dir = "docs") {
   message("   -> ", file.path(out_dir, "data.js"), " (",
           format(round(file.size(file.path(out_dir, "data.js")) / 1e6, 1)), " Mo)")
   invisible(data)
+}
+
+#' Retour au jeu : épisodes, courbes par épisode et synthèse
+export_returns <- function(rt) {
+  if (is.null(rt) || is.null(rt$absences) || nrow(rt$absences) == 0) return(NULL)
+  ab <- rt$absences
+  eps <- ab |> transmute(id = label, type, start = format(absence_start), end = format(absence_end),
+                         ret = format(return_date), days = absence_days, injury = injury_declared)
+  curves <- NULL
+  if (!is.null(rt$curves)) {
+    cv <- rt$curves |> arrange(label, return_date, week)
+    curves <- lapply(split(cv, paste(cv$label, format(cv$return_date))), function(d) list(
+      id = d$label[1], ret = format(d$return_date[1]), week = I(d$week),
+      srpe = I(rnd(d$srpe, 2)), hsr = I(rnd(d$hsr, 2)), vmax = I(rnd(d$vmax, 2)),
+      a0 = I(rnd(d$a0, 2)), s0 = I(rnd(d$s0, 2))))
+    names(curves) <- NULL
+  }
+  list(episodes = eps, curves = curves,
+       summary = if (is.null(rt$summary)) NULL else rt$summary |> mutate(across(c(med, q1, q3), ~ round(.x, 3))),
+       stats = rt$stats)
+}
+
+#' Seuils masculins / féminins : couverture, courbes, rangs, chiffres clés
+export_thresholds <- function(th) {
+  if (is.null(th) || is.null(th$coverage)) return(NULL)
+  list(coverage = th$coverage |> mutate(across(where(is.numeric), ~ round(.x, 3))),
+       curves = th$curves |> mutate(share = round(share, 3)),
+       ranks = if (is.null(th$ranks)) NULL else th$ranks |> filter(key %in% c("acc_high", "sprint_dist")) |>
+         transmute(key, label, pct_men = round(pct_men, 1), pct_women = round(pct_women, 1)),
+       stats = th$stats)
 }

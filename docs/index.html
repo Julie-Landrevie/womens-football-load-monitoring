@@ -153,6 +153,9 @@ table.expo td.read { white-space: normal; min-width: 220px; color: var(--ink-2);
 .lvl { font-size: 0.8rem; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
 .lvl.basse { border-color: var(--s-blue); }
 .lvl.haute { border-color: var(--s-orange); }
+td.pct-low { color: var(--alert); font-weight: 600; }
+.ret-legend { display: inline-flex; align-items: center; gap: 6px; }
+.ret-legend i { width: 14px; height: 10px; background: var(--empty); border: 1px solid var(--line); display: inline-block; border-radius: 2px; }
 .prose { max-width: 75ch; }
 .prose h3 { font-size: 1.1rem; margin: 22px 0 4px; }
 .prose p, .prose li { color: var(--ink); }
@@ -240,8 +243,8 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
       <span class="muted">Indicateur des graphiques</span>
       <div class="seg" id="metric-seg" role="group" aria-label="Indicateur affiché">
         <button type="button" data-metric="srpe" aria-pressed="true">Charge perçue (sRPE)</button>
-        <button type="button" data-metric="hsr" aria-pressed="false">Course &gt; 16 km/h</button>
-        <button type="button" data-metric="spr" aria-pressed="false">Sprint &gt; 20 km/h</button>
+        <button type="button" data-metric="hsr" aria-pressed="false" id="seg-hsr">Haute intensité</button>
+        <button type="button" data-metric="spr" aria-pressed="false" id="seg-spr">Sprint</button>
       </div>
     </div>
 
@@ -252,6 +255,7 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
           <span><i class="sw bar" style="background:var(--s-blue-light)"></i><span id="load-legend-day">Charge du jour (sRPE)</span></span>
           <span><i class="sw" style="background:var(--s-blue)"></i>Aiguë, EWMA 7 j</span>
           <span><i class="sw" style="background:var(--s-orange)"></i>Chronique, EWMA 28 j</span>
+          <span class="ret-legend"><i></i>Absence d'au moins 14 jours</span>
         </div>
         <div id="p-load" class="chart"></div>
       </div>
@@ -283,12 +287,18 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
         <div class="panel">
           <p class="chart-title">Charge externe : haute intensité</p>
           <div class="legend-inline">
-            <span><i class="sw" style="background:var(--s-blue)"></i>Course rapide (&gt; 16 km/h), m</span>
-            <span><i class="sw" style="background:var(--s-orange)"></i>Sprint (&gt; 20 km/h), m</span>
+            <span><i class="sw" style="background:var(--s-blue)"></i><span id="lg-hi">Haute intensité</span>, m</span>
+            <span><i class="sw" style="background:var(--s-orange)"></i><span id="lg-spr">Sprint</span>, m</span>
           </div>
           <div id="p-gps-hsr" class="chart"></div>
         </div>
       </div>
+    </div>
+
+    <div id="ret-player-block" hidden>
+      <h2>Reprises après une absence</h2>
+      <p class="hint">Absences d'au moins 14 jours sans charge ni GPS. Chaque semaine après la reprise est comparée aux 28 jours qui précèdent l'absence (100 % = son niveau d'avant). En rouge : sous 90 %. — : pas assez de données GPS cette semaine-là.</p>
+      <div class="table-wrap"><table class="expo" id="ret-table"></table></div>
     </div>
   </section>
 
@@ -326,6 +336,28 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
       <div class="panel"><p class="chart-title">Wellness (z-score)</p><p class="chart-sub">Médiane et intervalle interquartile</p><div id="r-well" class="chart"></div></div>
     </div>
     <div class="prose" id="research-text"></div>
+    <div id="th-block" hidden>
+      <h2>Seuils masculins ou féminins : ce qui reste visible</h2>
+      <p class="hint">Seuils féminins présentés par SkillCorner lors du webinaire public du 12/10/2026 (sprint &gt; 23 km/h, accélération haute &gt; 2,7 m/s²), comparés aux seuils masculins (&gt; 25 km/h, &gt; 3 m/s²). SkillCorner les a validés en match par tracking vidéo ; ici, même vérification sur le GPS de SoccerMon (entraînements et matchs, deux équipes de Toppserien).</p>
+      <div class="table-wrap" style="margin-bottom:14px"><table class="expo" id="th-table"></table></div>
+      <div class="two-col">
+        <div class="panel"><p class="chart-title">Distance de sprint</p><p class="chart-sub">Part des jours qui dépassent chaque distance</p><div id="r-th-sprint" class="chart"></div></div>
+        <div class="panel"><p class="chart-title">Accélérations hautes</p><p class="chart-sub">Part des jours qui dépassent chaque nombre d'accélérations</p><div id="r-th-acc" class="chart"></div></div>
+      </div>
+      <div class="two-col" style="margin-top:14px">
+        <div class="panel"><p class="chart-title">Rang de chaque joueuse : accélérations hautes</p><p class="chart-sub">Percentile avec le seuil masculin (abscisse) et féminin (ordonnée)</p><div id="r-th-rank" class="chart"></div></div>
+        <div class="prose" id="th-text"></div>
+      </div>
+    </div>
+    <div id="ret-block" hidden>
+      <h2>Retour au jeu après une absence</h2>
+      <p class="hint" id="ret-hint"></p>
+      <div class="two-col">
+        <div class="panel"><p class="chart-title">Charge perçue (sRPE)</p><p class="chart-sub">% de la référence d'avant l'absence, médiane et intervalle interquartile</p><div id="r-ret-srpe" class="chart"></div></div>
+        <div class="panel"><p class="chart-title">Vitesse maximale (GPS)</p><p class="chart-sub">% de la référence d'avant l'absence, médiane et intervalle interquartile</p><div id="r-ret-vmax" class="chart"></div></div>
+      </div>
+      <div class="prose" id="ret-text"></div>
+    </div>
     <div id="expo-block" hidden>
       <h2>Même ACWR, exposition différente</h2>
       <div class="prose" id="expo-text"></div>
@@ -348,7 +380,11 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
       <dt>Charge aiguë et chronique</dt><dd>Moyennes exponentielles sur 7 et 28 jours (EWMA) : elles donnent plus de poids aux jours récents qu'une moyenne simple.</dd>
       <dt>ACWR</dt><dd>Aiguë ÷ chronique. Autour de 1 : charge habituelle. La zone 0,8–1,5 sert de repère de progressivité, pas de prédicteur de blessure (débat ouvert dans la littérature).</dd>
       <dt>Valeurs absolues et niveau de la base</dt><dd>À côté de chaque ACWR : charge aiguë et chronique en valeur absolue (UA/jour pour le sRPE, mètres/jour pour le GPS), et charge chronique rapportée à la normale de la joueuse (médiane de sa charge chronique sur l'année précédente). Base basse sous 75 %, haute au-dessus de 125 %. Un ACWR de 0,78 n'a pas le même sens à 60 % ou à 110 % de la normale.</dd>
-      <dt>ACWR de la charge externe</dt><dd>Même calcul (EWMA 7 j / 28 j) sur la distance de course au-dessus de 16 km/h et de sprint au-dessus de 20 km/h. Un jour sans GPS ni charge déclarée compte 0 m (repos) ; un jour sans GPS mais avec une charge déclarée est manquant (séance non captée). Ratio affiché seulement si au moins 70 % des jours actifs des 28 derniers jours ont un fichier GPS.</dd>
+      <dt>Seuils GPS féminins</dt><dd>Course 13-19 km/h, haute intensité au-dessus de 19 km/h, sprint au-dessus de 23 km/h, accélération haute au-dessus de 2,7 m/s². <strong>Source :</strong> seuils calibrés sur le football féminin d'élite, présentés par SkillCorner lors du webinaire public « Women's Football: Dedicated Data, Smarter Decisions » (12/10/2026), dont la présentation a été transmise aux inscrits. Les seuils de la publication SoccerMon (16 et 20 km/h) et les seuils masculins (25 km/h, 3 m/s²) restent calculés pour comparaison (onglet Recherche).</dd>
+      <dt>Vitesse max et explosivité</dt><dd>Vitesse max = vitesse la plus élevée maintenue au moins 1 seconde (robuste aux pics GPS isolés). Explosivité = meilleur temps pour passer de moins de 2 m/s à 19 km/h, en moins de 5 secondes.</dd>
+      <dt>ACWR de la charge externe</dt><dd>Même calcul (EWMA 7 j / 28 j) sur la distance de haute intensité et de sprint. Un jour sans GPS ni charge déclarée compte 0 m (repos) ; un jour sans GPS mais avec une charge déclarée est manquant (séance non captée). Ratio affiché seulement si au moins 70 % des jours actifs des 28 derniers jours ont un fichier GPS.</dd>
+      <dt>Retour au jeu</dt><dd>Absence = au moins 14 jours consécutifs sans charge déclarée ni fichier GPS. Individuelle si au moins la moitié de l'équipe s'entraîne pendant ce temps, collective sinon (intersaison, coupure). Chaque semaine après la reprise est rapportée aux 28 jours précédant l'absence : charge perçue, course au-dessus de 16 km/h et vitesse maximale. Pour la vitesse max, la référence est la médiane des maxima hebdomadaires (un maximum sur 4 semaines serait mécaniquement plus élevé qu'un maximum sur une semaine).</dd>
+      <dt>Profil accélération-vitesse</dt><dd>Mesuré en séance à partir du GPS brut (Morin et al., 2021) : par tranche de vitesse de 0,2 m/s, accélération la plus élevée atteinte, puis droite ajustée au-delà de 3 m/s. A0 = accélération maximale théorique, S0 = vitesse maximale théorique.</dd>
       <dt>Monotonie</dt><dd>Moyenne ÷ écart-type de la charge sur 7 jours. Au-dessus de 2 : peu de variation d'un jour à l'autre.</dd>
       <dt>Wellness</dt><dd>Fatigue, humeur, disponibilité, sommeil, douleurs et stress, chacun comparé aux 28 jours précédents de la même joueuse (z-score), puis moyennés.</dd>
     </dl>
@@ -366,6 +402,7 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
       <li>Dans SoccerMon, un jour sans déclaration de charge vaut 0 : un repos et un oubli sont indiscernables.</li>
       <li>Les blessures sont auto-déclarées (douleur mineure ou majeure), sans diagnostic médical.</li>
       <li>Les seuils sont des repères réglables, à valider avec le staff.</li>
+      <li>SoccerMon ne donne pas la cause d'une absence ni le diagnostic des blessures : une reprise peut suivre une blessure, une maladie ou une période sans déclaration.</li>
     </ul>
   </section>
 </main>
@@ -434,16 +471,17 @@ const plot = (el, data, layout) => { if (window.Plotly) Plotly.react(el, data, l
 
 /* ---------- état ---------- */
 const state = { team: D.teams[0], from: allFirst, to: allLast, player: null, view: "team", sort: { key: "alerts", dir: -1 }, metric: "srpe" };
+const GL = D.meta.gps_labels || { hi: "> 16 km/h", sprint: "> 20 km/h", set: "SoccerMon" };
 const BASE_LOW = T.base_low ?? 0.75, BASE_HIGH = T.base_high ?? 1.25;
 
 // indicateurs affichables : séries du jour, aiguë, chronique, ACWR, niveau de base
 const METRICS = {
   srpe: { name: "Charge perçue (sRPE)", unit: "UA/j", dayUnit: "UA", day: "load", a: "acute", c: "chronic", r: "acwr", base: "base", dec: 0,
           title: "Charge interne (sRPE)", dayLbl: "Charge du jour (sRPE)" },
-  hsr:  { name: "Course > 16 km/h", unit: "m/j", dayUnit: "m", day: "gps_hsr", a: "hsr_a", c: "hsr_c", r: "hsr_acwr", base: "hsr_base", dec: 0,
-          title: "Charge externe : course au-dessus de 16 km/h", dayLbl: "Distance du jour > 16 km/h" },
-  spr:  { name: "Sprint > 20 km/h", unit: "m/j", dayUnit: "m", day: "gps_sprint", a: "spr_a", c: "spr_c", r: "spr_acwr", base: "spr_base", dec: 0,
-          title: "Charge externe : sprint au-dessus de 20 km/h", dayLbl: "Distance du jour > 20 km/h" }
+  hsr:  { name: "Haute intensité " + GL.hi, unit: "m/j", dayUnit: "m", day: "gps_hsr", a: "hsr_a", c: "hsr_c", r: "hsr_acwr", base: "hsr_base", dec: 0,
+          title: "Charge externe : haute intensité (" + GL.hi + ")", dayLbl: "Distance du jour " + GL.hi },
+  spr:  { name: "Sprint " + GL.sprint, unit: "m/j", dayUnit: "m", day: "gps_sprint", a: "spr_a", c: "spr_c", r: "spr_acwr", base: "spr_base", dec: 0,
+          title: "Charge externe : sprint (" + GL.sprint + ")", dayLbl: "Distance du jour " + GL.sprint }
 };
 const hasMetric = (s, k) => k === "srpe" || (s[METRICS[k].r] && s[METRICS[k].a]);
 const baseLevel = (b) => b == null ? null : b < BASE_LOW ? "basse" : b > BASE_HIGH ? "haute" : "habituelle";
@@ -457,6 +495,10 @@ function readRatio(r, b) {
   if (r < T.acwr_low) return lv === "basse" ? "Sous-exposition durable" : lv === "haute" ? "Baisse depuis une base haute (coupure, affûtage ?)" : "Baisse récente";
   return lv === "basse" ? "Progression régulière, mais à un niveau bas pour elle" : lv === "haute" ? "Charge stable à un niveau élevé pour elle" : "Charge habituelle";
 }
+const RET = D.returns || null;
+const retEpisodes = (id) => { if (!RET || !RET.episodes) return []; const e = RET.episodes; return e.id.map((x, i) => x === id ? { type: e.type[i], start: e.start[i], end: e.end[i], ret: e.ret[i], days: e.days[i], injury: e.injury[i] } : null).filter(Boolean); };
+const retCurve = (id, ret) => (RET && RET.curves || []).find((c) => c.id === id && c.ret === ret);
+const pctCell = (v) => v == null ? '<td class="r muted">—</td>' : `<td class="r${v < 0.9 ? " pct-low" : ""}">${Math.round(v * 100)}&nbsp;%</td>`;
 const lastIdx = (arr, i0, i1) => { if (!arr) return -1; for (let j = i1; j >= i0; j--) if (arr[j] != null) return j; return -1; };
 
 // indice d'une date dans la série d'une joueuse
@@ -675,7 +717,9 @@ function renderPlayer() {
     { type: "bar", x: dates, y: load, name: "Jour", marker: { color: css("--s-blue-light") }, hovertemplate: "%{y:,.0f} " + M.dayUnit },
     { type: "scatter", mode: "lines", x: dates, y: acute, name: "Aiguë (7 j)", line: { color: blue, width: 2 }, connectgaps: false, hovertemplate: "%{y:,.0f} " + M.unit },
     { type: "scatter", mode: "lines", x: dates, y: chronic, name: "Chronique (28 j)", line: { color: orange, width: 2 }, connectgaps: false, hovertemplate: "%{y:,.0f} " + M.unit }
-  ], baseLayout({ height: 280, bargap: 0.15, xaxis: Object.assign(baseLayout().xaxis, { range: xr }), yaxis: Object.assign(baseLayout().yaxis, { title: { text: M.dayUnit }, rangemode: "tozero" }) }));
+  ], baseLayout({ height: 280, bargap: 0.15,
+    shapes: retEpisodes(id).filter((e) => e.end >= xr[0] && e.start <= xr[1]).map((e) => ({ type: "rect", x0: e.start, x1: addDays(e.end, 1), yref: "paper", y0: 0, y1: 1, fillcolor: css("--empty"), line: { width: 0 }, layer: "below" })),
+    xaxis: Object.assign(baseLayout().xaxis, { range: xr }), yaxis: Object.assign(baseLayout().yaxis, { title: { text: M.dayUnit }, rangemode: "tozero" }) }));
 
   const yMax = Math.max(2, ...acwr.filter((v) => v != null));
   plot("p-acwr", [
@@ -698,6 +742,8 @@ function renderPlayer() {
 
   // GPS
   const hasGps = D.meta.has_gps && s.gps_km;
+  $("#lg-hi").textContent = "Haute intensité (" + GL.hi + ")"; $("#lg-spr").textContent = "Sprint (" + GL.sprint + ")";
+  $("#seg-hsr").textContent = "Haute intensité " + GL.hi; $("#seg-spr").textContent = "Sprint " + GL.sprint;
   $("#gps-block").hidden = !hasGps;
   if (hasGps) {
     const km = [], hsr = [], spr = [];
@@ -709,6 +755,22 @@ function renderPlayer() {
       { type: "scatter", mode: "markers", x: dates, y: spr, name: "Sprint", marker: { color: orange, size: 5 }, hovertemplate: "%{y:,.0f} m" }
     ], baseLayout({ height: 220, xaxis: Object.assign(baseLayout().xaxis, { range: xr }), yaxis: Object.assign(baseLayout().yaxis, { title: { text: "m" }, rangemode: "tozero" }) }));
   }
+  // reprises après une absence
+  const eps = retEpisodes(id);
+  $("#ret-player-block").hidden = !eps.length;
+  if (eps.length) {
+    const wk = [1, 2, 3, 4];
+    const head = "<thead><tr><th>Reprise le</th><th class='r'>Absence</th><th>Type</th>" +
+      wk.map((k) => `<th class='r'>sRPE S${k}</th>`).join("") + wk.map((k) => `<th class='r'>Vmax S${k}</th>`).join("") + "</tr></thead>";
+    const body = eps.map((e) => {
+      const c = retCurve(id, e.ret);
+      const at = (key, k) => { if (!c) return null; const j = c.week.indexOf(k); return j < 0 ? null : c[key][j]; };
+      return `<tr><td>${frDate(e.ret)}</td><td class="r">${e.days} j</td><td>${e.type}${e.injury ? " · blessure déclarée" : ""}</td>` +
+        wk.map((k) => pctCell(at("srpe", k))).join("") + wk.map((k) => pctCell(at("vmax", k))).join("") + "</tr>";
+    }).join("");
+    $("#ret-table").innerHTML = head + "<tbody>" + body + "</tbody>";
+  }
+
   syncZoom(["p-load", "p-acwr", "p-well"].concat(hasGps ? ["p-gps-dist", "p-gps-hsr"] : []));
 }
 
@@ -770,19 +832,94 @@ function renderInternalExternal() {
       xaxis: { title: { text: "Distance totale (km)" }, gridcolor: css("--line"), zeroline: false },
       yaxis: { title: { text: "sRPE (UA)" }, gridcolor: css("--line"), zeroline: false } }));
 }
+function renderThresholds() {
+  const TH = D.thresholds;
+  $("#th-block").hidden = !(TH && TH.coverage);
+  if (!TH || !TH.coverage) return;
+  const C = TH.coverage, st = TH.stats || {};
+  const fmtMed = (x, key) => key === "sprint_dist" ? nf(x) + " m" : nf(x, x % 1 ? 1 : 0);
+  $("#th-table").innerHTML = "<thead><tr><th>Indicateur</th><th class='r'>Seuil masculin</th><th class='r'>Jours &gt; 0</th><th class='r'>Médiane</th><th class='r'>Seuil féminin</th><th class='r'>Jours &gt; 0</th><th class='r'>Médiane</th></tr></thead><tbody>" +
+    C.key.map((k, i) => `<tr><td>${C.metric[i]}</td><td class="r">${C.men_lab[i]}</td><td class="r">${pct(C.cover_men[i])}</td><td class="r">${fmtMed(C.median_men[i], k)}</td>
+      <td class="r">${C.women_lab[i]}</td><td class="r"><strong>${pct(C.cover_women[i])}</strong></td><td class="r"><strong>${fmtMed(C.median_women[i], k)}</strong></td></tr>`).join("") + "</tbody>";
+  const cv = TH.curves;
+  const curve = (key) => {
+    const idx = cv.key.map((k, i) => k === key ? i : -1).filter((i) => i >= 0);
+    const sets = [...new Set(idx.map((i) => cv.set[i]))];
+    return sets.map((st2) => { const j = idx.filter((i) => cv.set[i] === st2);
+      const w = /féminin/.test(st2);
+      return { type: "scatter", mode: "lines", name: st2, x: j.map((i) => cv.x[i]), y: j.map((i) => cv.share[i]),
+        line: { color: w ? css("--s-blue") : css("--ink-3"), width: 2.4, dash: w ? "solid" : "dot" }, hovertemplate: st2 + " : %{y:.0%} des jours au-dessus de %{x}<extra></extra>" }; });
+  };
+  const lay = baseLayout({ height: 280, hovermode: "closest", showlegend: true, legend: { orientation: "h", y: 1.15, x: 0 },
+    xaxis: { gridcolor: css("--line"), zeroline: false }, yaxis: { tickformat: ".0%", range: [0, 1.02], gridcolor: css("--line"), zeroline: false } });
+  plot("r-th-sprint", curve("sprint_dist"), lay);
+  plot("r-th-acc", curve("acc_high"), lay);
+  const rk = TH.ranks;
+  if (rk) {
+    const idx = rk.key.map((k, i) => k === "acc_high" ? i : -1).filter((i) => i >= 0);
+    plot("r-th-rank", [{ type: "scatter", mode: "markers", x: idx.map((i) => rk.pct_men[i]), y: idx.map((i) => rk.pct_women[i]), text: idx.map((i) => rk.label[i]),
+      marker: { size: 9, color: idx.map((i) => rk.pct_men[i] <= 25 && rk.pct_women[i] >= 50 ? css("--alert") : css("--s-blue")), line: { color: css("--surface"), width: 1 } },
+      hovertemplate: "<b>%{text}</b><br>Seuil masculin : %{x:.0f}e percentile<br>Seuil féminin : %{y:.0f}e percentile<extra></extra>" }],
+      baseLayout({ height: 320, hovermode: "closest",
+        shapes: [{ type: "line", x0: 0, y0: 0, x1: 100, y1: 100, line: { color: css("--ink-3"), width: 1, dash: "dot" } },
+                 { type: "rect", x0: 0, x1: 25, y0: 50, y1: 100, fillcolor: css("--zone"), line: { width: 0 }, layer: "below" }],
+        xaxis: { title: { text: "Percentile, seuil masculin" }, range: [-3, 103], gridcolor: css("--line"), zeroline: false },
+        yaxis: { title: { text: "Percentile, seuil féminin" }, range: [-3, 103], gridcolor: css("--line"), zeroline: false } }));
+  }
+  const d = (x) => x == null || isNaN(x) ? "plus de 40" : x;
+  $("#th-text").innerHTML = `
+    <p><strong>Couverture.</strong> Avec le seuil masculin, ${pct(st.sprint_cover_men)} des jours ont au moins un mètre de sprint ; avec le seuil féminin, ${pct(st.sprint_cover_women)}. Pour les accélérations hautes : ${pct(st.acc_cover_men)} contre ${pct(st.acc_cover_women)}.</p>
+    <p><strong>Stabilité.</strong> Pour classer les joueuses de façon reproductible (corrélation ≥ 0,8 entre deux séries de jours), il faut ${d(st.stab_days_acc_men)} jours avec le seuil masculin d'accélération et ${d(st.stab_days_acc_women)} avec le seuil féminin ; pour le sprint, ${d(st.stab_days_sprint_men)} contre ${d(st.stab_days_sprint_women)}.</p>
+    <p><strong>Profils cachés.</strong> Sur ${st.players_ranked} joueuses classées, ${st.hidden_acc} sont dans le quart inférieur pour les accélérations avec le seuil masculin mais au-dessus de la médiane avec le seuil féminin (zone grisée).</p>
+    <p class="muted">Entraînements et matchs confondus (SoccerMon ne les distingue pas), alors que SkillCorner travaille sur les matchs. Les efforts sont comptés quand l'accélération reste au-dessus du seuil au moins 0,5 s.</p>`;
+}
+function renderReturns() {
+  $("#ret-block").hidden = !(RET && RET.summary && RET.stats);
+  if (!RET || !RET.summary || !RET.stats) return;
+  const S = RET.summary, st = RET.stats;
+  const series = (metric, type, color, fill) => {
+    const idx = S.type.map((t, i) => t === type && S.metric[i] === metric && S.n[i] >= 5 ? i : -1).filter((i) => i >= 0);
+    if (!idx.length) return [];
+    const x = idx.map((i) => S.week[i]), pick = (k) => idx.map((i) => S[k][i]);
+    const name = type === "individuelle" ? "Absence individuelle" : "Absence collective";
+    return [
+      { type: "scatter", x, y: pick("q3"), mode: "lines", line: { width: 0 }, hoverinfo: "skip", showlegend: false },
+      { type: "scatter", x, y: pick("q1"), mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: fill, hoverinfo: "skip", showlegend: false },
+      { type: "scatter", x, y: pick("med"), mode: "lines+markers", name, line: { color, width: 2.4 }, marker: { size: 6 },
+        customdata: idx.map((i) => S.n[i]), hovertemplate: name + " · semaine %{x} : %{y:.0%} (n = %{customdata})<extra></extra>" }];
+  };
+  const blue = css("--s-blue"), orange = css("--s-orange");
+  const fb = "rgba(57,135,229,0.15)", fo = "rgba(235,104,52,0.15)";
+  const lay = (yr) => baseLayout({ height: 300, hovermode: "closest", showlegend: true, legend: { orientation: "h", y: 1.12, x: 0 },
+    shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: css("--ink-3"), width: 1 } },
+             { type: "line", xref: "paper", x0: 0, x1: 1, y0: 0.9, y1: 0.9, line: { color: css("--ink-3"), width: 1, dash: "dot" } }],
+    xaxis: { title: { text: "Semaine après la reprise" }, dtick: 1, gridcolor: css("--line"), zeroline: false },
+    yaxis: { tickformat: ".0%", range: yr, gridcolor: css("--line"), zeroline: false } });
+  plot("r-ret-srpe", series("srpe", "individuelle", blue, fb).concat(series("srpe", "collective", orange, fo)), lay([0, 2.5]));
+  plot("r-ret-vmax", series("vmax", "individuelle", blue, fb).concat(series("vmax", "collective", orange, fo)), lay([0.7, 1.2]));
+  $("#ret-hint").textContent = `${st.absences_individual} absences individuelles (médiane ${st.absence_days_median_individual} jours, dont ${st.absences_injury} avec une blessure déclarée) et ${st.absences_collective} absences collectives (intersaison, coupures). Chaque semaine après la reprise est comparée aux 28 jours qui précèdent l'absence.`;
+  const p = (x) => x == null || isNaN(x) ? "—" : Math.round(x * 100) + " %";
+  $("#ret-text").innerHTML = `
+    <p><strong>Après une absence individuelle</strong>, la charge perçue reprend progressivement : ${p(st.srpe_w1_individual)} de la référence la première semaine, ${p(st.srpe_w2_individual)} la deuxième, ${p(st.srpe_w3_individual)} la troisième (médianes sur ${st.curves_individual} reprises).</p>
+    <p><strong>Après une coupure collective</strong>, c'est l'inverse : la première semaine atteint ${p(st.srpe_w1_collective)} de la charge d'avant la coupure, avec une vitesse maximale déjà à ${p(st.vmax_w1_collective)}. La reprise de saison est chargée d'emblée.</p>
+    <p><strong>Pourquoi un suivi dédié ?</strong> Dans les 4 semaines qui suivent une reprise individuelle, l'ACWR est masqué ${p(st.acwr_masked_after_return)} des jours (trop peu de jours documentés sur 28 jours), alors que le ratio brut dépasse 1,5 sur ${p(st.acwr_raw_high_after_return)} des jours. Les alertes d'ACWR se taisent au moment où la progressivité compte le plus : la comparaison à la référence d'avant l'absence prend le relais.</p>
+    <p class="muted">Limites : SoccerMon ne donne ni la cause des absences ni de diagnostic. Le GPS ne couvre qu'environ 60 % des séances : seules ${st.gps_curves_individual} reprises individuelles ont assez de GPS pour suivre la vitesse maximale, trop peu pour conclure sur ce point.</p>`;
+}
 function renderExposure() {
   const E = D.exposure;
   $("#expo-block").hidden = !E;
   if (!E) return;
   let h = `<p>Pour un ACWR sRPE autour de 0,8 (${nf(E.n_near_08)} jours-joueuses entre 0,75 et 0,85), la charge aiguë va de <strong>${nf(E.acute_near_08[0])} à ${nf(E.acute_near_08[2])} UA par jour</strong> (10<sup>e</sup> et 90<sup>e</sup> percentiles) : le même ratio recouvre des expositions qui varient du simple au double.</p>
     <p><strong>${pct(E.high_alert_low_base)}</strong> des jours d'alerte « hausse rapide » partent d'une base basse (moins de ${Math.round(BASE_LOW * 100)} % de la normale de la joueuse) : ce sont surtout des reprises. <strong>${pct(E.low_alert_low_base)}</strong> des jours d'alerte « sous-charge » ont lieu sur une base déjà basse : une sous-exposition qui dure plus qu'un creux passager. Le staff ne répond pas de la même façon à ces situations, d'où le contexte ajouté à chaque alerte.</p>`;
-  if (E.gps_days) h += `<p><strong>Charge externe.</strong> Sur ${nf(E.gps_days)} jours-joueuses où les deux ratios sont interprétables (${E.gps_players} joueuses), l'ACWR sRPE et l'ACWR de course au-dessus de 16 km/h ne sont que modérément corrélés (r = ${nf(E.cor_srpe_hsr, 2)}). Dans <strong>${pct(E.hsr_spike_srpe_in_zone)}</strong> des ${nf(E.hsr_spike_days)} jours où l'ACWR de course rapide dépasse ${nf(T.acwr_high, 1)}, l'ACWR sRPE reste sous ce seuil : la charge perçue seule ne voit pas ces pics de course à haute intensité.</p>`;
+  if (E.gps_days) h += `<p><strong>Charge externe.</strong> Sur ${nf(E.gps_days)} jours-joueuses où les deux ratios sont interprétables (${E.gps_players} joueuses), l'ACWR sRPE et l'ACWR de haute intensité (${GL.hi}) ne sont que modérément corrélés (r = ${nf(E.cor_srpe_hsr, 2)}). Dans <strong>${pct(E.hsr_spike_srpe_in_zone)}</strong> des ${nf(E.hsr_spike_days)} jours où l'ACWR de haute intensité dépasse ${nf(T.acwr_high, 1)}, l'ACWR sRPE reste sous ce seuil : la charge perçue seule ne voit pas ces pics de course à haute intensité.</p>`;
   h += `<p class="muted">Lecture descriptive. Le niveau de base est comparé à la médiane de l'année précédente de chaque joueuse ; les seuils de 75 % et 125 % sont des repères à discuter avec le staff.</p>`;
   $("#expo-text").innerHTML = h;
 }
 function renderResearch() {
   renderInternalExternal();
   renderExposure();
+  renderThresholds();
+  renderReturns();
   const pr = D.injury_profile;
   if (!pr) { $("#research-text").innerHTML = '<p class="empty">Aucune déclaration de blessure dans les données chargées.</p>'; return; }
   const band = (q1, q3, med, color, fmt) => [

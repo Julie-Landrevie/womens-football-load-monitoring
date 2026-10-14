@@ -54,9 +54,20 @@ CONFIG <- list(
   base_low      = 0.75,   # base « basse » : chronique < 75 % de sa normale
   base_high     = 1.25,   # base « haute » : chronique > 125 % de sa normale
 
-  # ACWR GPS (course > 16 km/h, sprint > 20 km/h) : part minimale des jours
+  # ACWR GPS (haute intensité et sprint, seuils féminins par défaut) : part minimale des jours
   # actifs des 28 derniers jours (charge > 0 ou GPS) qui ont un fichier GPS
   min_coverage_gps = 0.7,
+
+  # Retour au jeu (07_return.R)
+  return_min_absence      = 14,  # jours consécutifs sans charge ni GPS = absence
+  return_baseline_days    = 28,  # référence : les 28 jours avant l'absence
+  return_weeks            = 8,   # semaines suivies après la reprise
+  return_min_gps_coverage = 0.6, # part minimale des jours actifs avec GPS (référence et semaine)
+
+  # Profil accélération-vitesse (08_as_profile.R, Morin et al. 2021)
+  as_min_speed  = 3,    # m/s : ajustement au-delà de cette vitesse
+  as_min_points = 8,    # tranches de 0,2 m/s minimum pour ajuster la droite
+  as_min_r2     = 0.6,  # qualité minimale de l'ajustement
 
   # Bornes plausibles par variable (contrôle qualité). Échelles d'après
   # Midoglu et al. 2024 (Scientific Data), tableau 1.

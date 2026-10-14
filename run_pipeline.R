@@ -47,17 +47,40 @@ gps_qc <- NULL
 if (!is.null(gps_daily)) {
   message("   GPS : ", nrow(gps_daily), " jours-joueuses (data/processed/gps_daily.csv)")
   metrics <- metrics |>
-    left_join(gps_daily |> select(player, date, total_km, hsr_m, sprint_m, vmax_kmh, n_acc, n_dec),
+    left_join(gps_daily |> select(-any_of(c("n_files", "gap_share", "duration_min", "signal_min"))),
               by = c("player", "date"))
   if (file.exists("data/processed/gps_qc.csv")) gps_qc <- read_csv("data/processed/gps_qc.csv", show_col_types = FALSE)
 } else {
   message("   GPS : pas de data/processed/gps_daily.csv (lancer run_gps.R pour l'ajouter)")
 }
-# ACWR de la charge externe (course > 16 km/h, sprint > 20 km/h), en m/jour
+# Seuils GPS : féminins (SkillCorner, webinaire public du 12/10/2026) si la table
+# GPS a été produite par la version actuelle de run_gps.R, SoccerMon sinon
+hg <- harmonise_gps(metrics); metrics <- hg$metrics; GPS_LABELS <- hg$labels
+if (!is.null(GPS_LABELS)) message("   Seuils GPS utilisés : ", GPS_LABELS$set, " (haute intensité ", GPS_LABELS$hi,
+                                  ", sprint ", GPS_LABELS$sprint, ")")
+# ACWR de la charge externe (haute intensité et sprint), en m/jour
 metrics  <- compute_external_acwr(metrics)
 exposure <- exposure_summary(metrics)
 message("   Ratio et valeurs absolues (chiffres du README, résultat 6) :")
 for (k in names(exposure)) message("     ", k, " = ", paste(exposure[[k]], collapse = " / "))
+# Retour au jeu : reprises après au moins 14 jours d'absence
+as_sessions <- load_as_sessions()
+if (!is.null(as_sessions)) message("   Profil accélération-vitesse : ", nrow(as_sessions), " séances (data/processed/as_sessions.csv)")
+returns <- compute_returns(metrics, injuries, as_sessions)
+if (!is.null(returns)) {
+  message("   Retour au jeu (chiffres du README, résultat 7) :")
+  for (k in names(returns$stats)) message("     ", k, " = ", paste(returns$stats[[k]], collapse = " / "))
+}
+as_month <- as_monthly(as_sessions, distinct(metrics, player, label, team))
+if (!is.null(as_month) && nrow(as_month))
+  message(sprintf("   Profils A-S mensuels : %d ; A0 médian %.2f m/s², S0 médian %.2f m/s",
+                  nrow(as_month), median(as_month$a0), median(as_month$s0)))
+# Seuils masculins ou féminins : couverture, stabilité, profils cachés
+thresholds <- compute_thresholds(gps_daily, distinct(metrics, player, label, team))
+if (!is.null(thresholds)) {
+  message("   Seuils masculins / féminins (chiffres du README, résultat 8) :")
+  for (k in names(thresholds$stats)) message("     ", k, " = ", paste(thresholds$stats[[k]], collapse = " / "))
+}
 consistency <- qc_consistency(metrics)
 weekly      <- weekly_summary(metrics)
 inj_win     <- injury_windows(metrics, injuries)
@@ -88,6 +111,12 @@ write_csv(zero_runs,    file.path(out_tab, "qc_plages_sans_charge.csv"))
 write_csv(metrics,      file.path(out_tab, "indicateurs_journaliers.csv"))
 write_csv(weekly,       file.path(out_tab, "synthese_hebdomadaire.csv"))
 write_csv(alerts,       file.path(out_tab, "points_attention.csv"))
+if (!is.null(returns)) {
+  write_csv(returns$absences, file.path(out_tab, "reprises_absences.csv"))
+  if (!is.null(returns$curves)) write_csv(returns$curves, file.path(out_tab, "reprises_courbes.csv"))
+  if (!is.null(returns$summary)) write_csv(returns$summary, file.path(out_tab, "reprises_synthese.csv"))
+}
+if (!is.null(as_month)) write_csv(as_month, file.path(out_tab, "profil_acceleration_vitesse_mensuel.csv"))
 write_csv(tibble::enframe(lapply(exposure, paste, collapse = " / "), name = "indicateur", value = "valeur") |>
             mutate(valeur = unlist(valeur)),
           file.path(out_tab, "ratio_valeurs_absolues.csv"))
@@ -110,6 +139,14 @@ for (pl in example_players) {
 save_fig(fig_injury_profile(inj_win), "05_profil_pre_blessure.png", h = 4.5)
 save_fig(fig_internal_external(metrics), "06_interne_externe.png", w = 10, h = 5)
 save_fig(fig_exposure(metrics), "08_ratio_et_base.png", w = 10, h = 5.5)
+save_fig(fig_return_curves(returns$summary), "09_retour_au_jeu.png", w = 12, h = 4.8)
+save_fig(fig_threshold_coverage(thresholds), "10_seuils_couverture.png", w = 11, h = 5)
+save_fig(fig_threshold_ranks(thresholds), "11_seuils_profils_caches.png", w = 8, h = 7.5)
+if (!is.null(thresholds)) {
+  write_csv(thresholds$coverage, file.path(out_tab, "seuils_couverture.csv"))
+  write_csv(thresholds$stability, file.path(out_tab, "seuils_stabilite.csv"))
+  write_csv(thresholds$ranks, file.path(out_tab, "seuils_rangs_joueuses.csv"))
+}
 for (pl in example_players) save_fig(fig_player_gps(metrics, pl), paste0("07_gps_", player_label(metrics, pl), ".png"), h = 6)
 
 saveRDS(list(daily_long = daily_long, injuries = injuries, metrics = metrics,
@@ -117,7 +154,8 @@ saveRDS(list(daily_long = daily_long, injuries = injuries, metrics = metrics,
              duplicates = duplicates, summary_qc = summary_qc, zero_runs = zero_runs,
              consistency = consistency, weekly = weekly, alerts = alerts,
              inj_win = inj_win, example_players = example_players, gps_qc = gps_qc,
-             exposure = exposure,
+             exposure = exposure, returns = returns, as_month = as_month,
+             thresholds = thresholds, gps_labels = GPS_LABELS,
              config = CONFIG, data_dir = CONFIG$data_dir),
         file.path(CONFIG$output_dir, "pipeline.rds"))
 
@@ -130,6 +168,9 @@ save_doc(fig_injury_profile(inj_win), "profil_pre_blessure.png", 9, 4.5)
 save_doc(fig_qc_completeness(completeness), "qc_completude.png", 9, 10)
 save_doc(fig_internal_external(metrics), "interne_externe.png", 10, 5)
 save_doc(fig_exposure(metrics), "ratio_et_base.png", 10, 5.5)
+save_doc(fig_return_curves(returns$summary), "retour_au_jeu.png", 12, 4.8)
+save_doc(fig_threshold_coverage(thresholds), "seuils_couverture.png", 11, 5)
+save_doc(fig_threshold_ranks(thresholds), "seuils_profils_caches.png", 8, 7.5)
 
 message("   Tableau de bord web")
 export_dashboard(readRDS(file.path(CONFIG$output_dir, "pipeline.rds")), out_dir = "docs")

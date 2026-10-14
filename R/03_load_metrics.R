@@ -202,7 +202,7 @@ injury_windows <- function(metrics, injuries, before = 21) {
 # dit pas si la joueuse s'entraîne beaucoup ou peu. On ajoute donc :
 #   - les valeurs absolues (aiguë et chronique, en UA/jour ou en m/jour) ;
 #   - le niveau de la base : charge chronique / normale de la joueuse ;
-#   - l'ACWR sur la charge externe (course > 16 km/h, sprint > 20 km/h).
+#   - l'ACWR sur la charge externe (haute intensité et sprint, cf. harmonise_gps).
 # =============================================================================
 
 #' EWMA tolérante aux jours manquants : un NA ne met pas à jour la moyenne
@@ -255,7 +255,7 @@ compute_base_level <- function(metrics, cfg = CONFIG) {
 #' L'ACWR GPS n'est interprétable que si au moins `min_coverage_gps` des jours
 #' actifs (charge > 0 ou GPS) des 28 derniers jours ont un fichier GPS.
 compute_external_acwr <- function(metrics, cfg = CONFIG) {
-  if (!all(c("total_km", "hsr_m", "sprint_m") %in% names(metrics))) return(metrics)
+  if (!all(c("total_km", "gps_hi_m", "gps_sprint_m") %in% names(metrics))) return(metrics)
   a <- cfg$acute_window; c <- cfg$chronic_window
   one <- function(v, has_gps, active, in_gps) {
     x <- ifelse(has_gps, v, ifelse(active, NA_real_, 0))
@@ -275,11 +275,11 @@ compute_external_acwr <- function(metrics, cfg = CONFIG) {
                                  roll_sum(as.numeric(active & in_gps), c)),
       gps_interpretable = in_gps & gps_day >= c & !is.na(gps_coverage_28) &
                           gps_coverage_28 >= cfg$min_coverage_gps,
-      hsr_acute     = one(hsr_m, has_gps, active, in_gps)$acute,
-      hsr_chronic   = one(hsr_m, has_gps, active, in_gps)$chronic,
+      hsr_acute     = one(gps_hi_m, has_gps, active, in_gps)$acute,
+      hsr_chronic   = one(gps_hi_m, has_gps, active, in_gps)$chronic,
       hsr_acwr      = safe_div(hsr_acute, hsr_chronic),
-      sprint_acute  = one(sprint_m, has_gps, active, in_gps)$acute,
-      sprint_chronic = one(sprint_m, has_gps, active, in_gps)$chronic,
+      sprint_acute  = one(gps_sprint_m, has_gps, active, in_gps)$acute,
+      sprint_chronic = one(gps_sprint_m, has_gps, active, in_gps)$chronic,
       sprint_acwr   = safe_div(sprint_acute, sprint_chronic),
       hsr_base_rel    = safe_div(hsr_chronic, usual_level(hsr_chronic, gps_interpretable, cfg$base_window, cfg$base_min_days)),
       sprint_base_rel = safe_div(sprint_chronic, usual_level(sprint_chronic, gps_interpretable, cfg$base_window, cfg$base_min_days))

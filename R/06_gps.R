@@ -20,9 +20,29 @@
 
 suppressPackageStartupMessages({ library(dplyr); library(readr); library(purrr) })
 
+# Bandes de vitesse et d'accélération.
+#  - « SoccerMon » : seuils utilisés dans la publication du jeu de données
+#    (16 et 20 km/h), conservés pour comparaison ;
+#  - « féminins » : seuils calibrés sur le football féminin d'élite présentés par
+#    SkillCorner lors du webinaire public « Women's Football: Dedicated Data,
+#    Smarter Decisions » (12/10/2026 ; présentation transmise aux inscrits) :
+#    course 13-19 km/h, HSR 19-23 km/h, sprint > 23 km/h, accélération moyenne
+#    1,4-2,7 m/s², haute > 2,7 m/s² ;
+#  - « masculins » : 20-25 km/h, sprint > 25 km/h, accélération haute > 3 m/s²,
+#    pour mesurer ce que les seuils masculins font perdre.
 GPS_CONFIG <- list(
-  hsr_speed      = 4.44,  # m/s = 16 km/h : course à haute intensité (seuils SoccerMon)
-  sprint_speed   = 5.55,  # m/s = 20 km/h : sprint
+  hsr_speed      = 4.44,  # m/s = 16 km/h : course rapide (seuils SoccerMon)
+  sprint_speed   = 5.55,  # m/s = 20 km/h : sprint (seuils SoccerMon)
+  w_run_speed    = 13 / 3.6,  # féminins : course 13-19 km/h
+  w_hi_speed     = 19 / 3.6,  # féminins : haute intensité > 19 km/h (HSR 19-23 + sprint)
+  w_sprint_speed = 23 / 3.6,  # féminins : sprint > 23 km/h
+  m_sprint_speed = 25 / 3.6,  # masculins : sprint > 25 km/h
+  w_acc_med      = 1.4,       # féminins : accélération moyenne 1,4-2,7 m/s²
+  w_acc_high     = 2.7,       # féminins : accélération haute > 2,7 m/s²
+  m_acc_high     = 3,         # masculins : accélération haute > 3 m/s²
+  sprint_min_samples = 10,    # un sprint compté = au moins 1 s au-dessus du seuil
+  explo_start_speed  = 2,     # m/s : départ « arrêté ou au trot » pour l'explosivité
+  explo_window       = 5,     # s : délai maximal pour atteindre 19 km/h
   max_speed      = 10,    # m/s = 36 km/h : au-delà, valeur aberrante
   acc_threshold  = 2,     # m/s² : accélération / décélération
   acc_min_samples = 5,    # durée minimale d'un effort : 5 x 0,1 s = 0,5 s
@@ -54,6 +74,37 @@ count_efforts <- function(cond, min_len) {
   sum(r$values & r$lengths >= min_len)
 }
 
+# efforts au-dessus de `lo` pendant `min_len` échantillons, dont le pic reste
+# sous `hi` (accélérations « moyennes » : 1,4-2,7 m/s²)
+count_efforts_band <- function(x, lo, hi, min_len) {
+  cond <- !is.na(x) & x > lo
+  r <- rle(cond); end <- cumsum(r$lengths); start <- end - r$lengths + 1
+  k <- which(r$values & r$lengths >= min_len)
+  sum(vapply(k, function(i) max(x[start[i]:end[i]]) <= hi, logical(1)))
+}
+
+# vitesse maximale maintenue au moins `k` échantillons (1 s à 10 Hz) :
+# robuste aux pics GPS isolés (même objectif que la PSV-99 de SkillCorner)
+vmax_sustained <- function(v, k = 10) {
+  n <- length(v)
+  if (n < k || sum(!is.na(v)) < k) return(NA_real_)
+  r <- do.call(pmin, lapply(0:(k - 1), function(l) v[(1 + l):(n - k + 1 + l)]))
+  if (all(is.na(r))) NA_real_ else max(r, na.rm = TRUE)
+}
+
+# explosivité : meilleur temps pour passer de < 2 m/s à 19 km/h en moins de 5 s
+time_to_speed <- function(v, sec, from, to, window) {
+  up <- which(!is.na(v[-1]) & v[-1] >= to & !is.na(v[-length(v)]) & v[-length(v)] < to) + 1
+  if (!length(up)) return(c(best = NA_real_, n = 0))
+  t <- vapply(up, function(i) {
+    j <- i - 1
+    while (j > 0 && sec[i] - sec[j] <= window && !is.na(v[j]) && v[j] >= from) j <- j - 1
+    if (j < 1 || is.na(v[j]) || v[j] >= from || sec[i] - sec[j] > window) NA_real_ else sec[i] - sec[j]
+  }, numeric(1))
+  t <- t[!is.na(t)]
+  c(best = if (length(t)) min(t) else NA_real_, n = length(t))
+}
+
 #' Résumé d'une séance à partir des données brutes (data.frame)
 gps_summarise_df <- function(df, cfg = GPS_CONFIG) {
   d <- df[!duplicated(df$time), c("time", "speed", "lat")]
@@ -75,6 +126,7 @@ gps_summarise_df <- function(df, cfg = GPS_CONFIG) {
   acc <- c(NA, diff(smooth) / diff(d$sec))
   acc[c(FALSE, diff(d$sec) > 0.15)] <- NA
 
+  ex <- time_to_speed(smooth, d$sec, cfg$explo_start_speed, cfg$w_hi_speed, cfg$explo_window)
   tibble(
     duration_min = (max(d$sec) - min(d$sec)) / 60,
     signal_min   = sum(dt_ok) / 60,
@@ -86,6 +138,21 @@ gps_summarise_df <- function(df, cfg = GPS_CONFIG) {
     vmax_kmh     = suppressWarnings(max(smooth, na.rm = TRUE)) * 3.6,
     n_acc        = count_efforts(acc >  cfg$acc_threshold, cfg$acc_min_samples),
     n_dec        = count_efforts(acc < -cfg$acc_threshold, cfg$acc_min_samples),
+    # seuils féminins (SkillCorner, webinaire 12/10/2026) et masculins
+    run_w_m      = sum(dist_step[v_ok > cfg$w_run_speed & v_ok <= cfg$w_hi_speed]),
+    hi_w_m       = sum(dist_step[v_ok > cfg$w_hi_speed]),
+    sprint_w_m   = sum(dist_step[v_ok > cfg$w_sprint_speed]),
+    sprint_men_m = sum(dist_step[v_ok > cfg$m_sprint_speed]),
+    n_sprint_w   = count_efforts(smooth > cfg$w_sprint_speed, cfg$sprint_min_samples),
+    n_sprint_men = count_efforts(smooth > cfg$m_sprint_speed, cfg$sprint_min_samples),
+    n_acc_med_w  = count_efforts_band(acc, cfg$w_acc_med, cfg$w_acc_high, cfg$acc_min_samples),
+    n_acc_high_w = count_efforts(acc >  cfg$w_acc_high, cfg$acc_min_samples),
+    n_acc_high_men = count_efforts(acc >  cfg$m_acc_high, cfg$acc_min_samples),
+    n_dec_high_w = count_efforts(acc < -cfg$w_acc_high, cfg$acc_min_samples),
+    n_dec_high_men = count_efforts(acc < -cfg$m_acc_high, cfg$acc_min_samples),
+    vmax_1s_kmh  = vmax_sustained(smooth, 10) * 3.6,
+    t19_best_s   = unname(ex["best"]),
+    n_t19        = unname(ex["n"]),
     n_samples    = n_raw
   )
 }
@@ -112,7 +179,8 @@ gps_list_files <- function(dir) {
 
 #' Traite tous les fichiers, avec cache : un fichier déjà traité n'est pas relu.
 #' Le cache est écrit par paquets, on peut donc interrompre et relancer.
-process_gps <- function(dir, cache_file = "data/processed/gps_sessions.csv",
+process_gps <- function(dir, cache_file = "data/processed/gps_sessions_v2.csv",
+                        as_file = "data/processed/as_sessions.csv",
                         cores = max(1, parallel::detectCores() - 2), chunk = 200) {
   if (!dir.exists(dir)) stop("Dossier GPS introuvable : ", dir)
   dir.create(dirname(cache_file), recursive = TRUE, showWarnings = FALSE)
@@ -130,14 +198,23 @@ process_gps <- function(dir, cache_file = "data/processed/gps_sessions.csv",
   idx <- split(seq_len(nrow(todo)), ceiling(seq_len(nrow(todo)) / chunk))
   for (k in seq_along(idx)) {
     rows <- todo[idx[[k]], ]
+    # une seule lecture par fichier : résumé de séance ET profil accélération-vitesse
     res <- parallel::mclapply(seq_len(nrow(rows)), function(i) {
-      out <- tryCatch(gps_summarise_df(gps_read_file(rows$path[i])),
-                      error = function(e) tibble(error = conditionMessage(e)))
+      df <- tryCatch(gps_read_file(rows$path[i]), error = function(e) e)
+      if (inherits(df, "error"))
+        return(list(s = bind_cols(rows[i, c("file", "date", "player")], tibble(error = conditionMessage(df))), a = NULL))
+      out <- tryCatch(gps_summarise_df(df), error = function(e) tibble(error = conditionMessage(e)))
       if (is.null(out)) out <- tibble(error = "fichier vide")
-      bind_cols(rows[i, c("file", "date", "player")], out)
+      a <- if (exists("as_session_df")) tryCatch(as_session_df(df), error = function(e) NULL) else NULL
+      list(s = bind_cols(rows[i, c("file", "date", "player")], out),
+           a = if (is.null(a)) NULL else bind_cols(rows[i, c("file", "date", "player")], a, tibble(error = NA_character_)))
     }, mc.cores = cores)
-    res <- bind_rows(res)
-    write_csv(res, cache_file, append = file.exists(cache_file))
+    s_res <- bind_rows(lapply(res, `[[`, "s"))
+    if (!"error" %in% names(s_res)) s_res$error <- NA_character_
+    write_csv(s_res, cache_file, append = file.exists(cache_file), na = "")
+    a_res <- bind_rows(lapply(res, `[[`, "a"))
+    if (nrow(a_res)) write_csv(a_res |> mutate(across(starts_with("a_"), ~ round(.x, 3))),
+                               as_file, append = file.exists(as_file), na = "")
     el <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
     n_done <- sum(lengths(idx[1:k]))
     message(sprintf("  %d / %d fichiers (%.0f %%) — %.1f min écoulées, ~%.0f min restantes",
@@ -163,7 +240,14 @@ gps_daily_from_sessions <- function(sessions, cfg = GPS_CONFIG) {
               duration_min = sum(duration_min), signal_min = sum(signal_min),
               total_km = sum(total_km), hsr_m = sum(hsr_m), sprint_m = sum(sprint_m),
               vmax_kmh = max(vmax_kmh), n_acc = sum(n_acc), n_dec = sum(n_dec),
+              across(any_of(c("run_w_m", "hi_w_m", "sprint_w_m", "sprint_men_m", "n_sprint_w", "n_sprint_men",
+                              "n_acc_med_w", "n_acc_high_w", "n_acc_high_men", "n_dec_high_w", "n_dec_high_men", "n_t19")),
+                     ~ sum(.x, na.rm = TRUE)),
+              across(any_of("vmax_1s_kmh"), ~ suppressWarnings(max(.x, na.rm = TRUE))),
+              across(any_of("t19_best_s"), ~ suppressWarnings(min(.x, na.rm = TRUE))),
               .groups = "drop") |>
+    mutate(across(any_of(c("vmax_1s_kmh", "t19_best_s")), ~ ifelse(is.finite(.x), round(.x, 2), NA_real_)),
+           across(any_of(c("run_w_m", "hi_w_m", "sprint_w_m", "sprint_men_m")), ~ round(.x, 1))) |>
     mutate(across(c(duration_min, signal_min, total_km, vmax_kmh), ~ round(.x, 3)),
            across(c(hsr_m, sprint_m), ~ round(.x, 1)), gap_share = round(gap_share, 4))
   qc <- tibble(
@@ -183,4 +267,22 @@ gps_daily_from_sessions <- function(sessions, cfg = GPS_CONFIG) {
 load_gps_daily <- function(path = "data/processed/gps_daily.csv") {
   if (!file.exists(path)) return(NULL)
   read_csv(path, show_col_types = FALSE) |> mutate(date = as.Date(date))
+}
+
+#' Colonnes GPS utilisées par l'analyse : seuils féminins si la table GPS a été
+#' produite par la version actuelle de run_gps.R, seuils SoccerMon sinon.
+#' Ajoute gps_hi_m, gps_sprint_m, gps_vmax et gps_t19 (explosivité) et renvoie
+#' les libellés correspondants.
+harmonise_gps <- function(metrics) {
+  if (!"total_km" %in% names(metrics)) return(list(metrics = metrics, labels = NULL))
+  women <- all(c("hi_w_m", "sprint_w_m") %in% names(metrics))
+  m <- metrics |>
+    mutate(gps_hi_m     = if (women) hi_w_m else hsr_m,
+           gps_sprint_m = if (women) sprint_w_m else sprint_m,
+           gps_vmax     = if ("vmax_1s_kmh" %in% names(metrics)) vmax_1s_kmh else vmax_kmh,
+           gps_t19      = if ("t19_best_s" %in% names(metrics)) t19_best_s else NA_real_)
+  labels <- if (women) list(hi = "> 19 km/h", sprint = "> 23 km/h", set = "féminins (SkillCorner)",
+                            vmax = "vitesse max maintenue 1 s")
+            else list(hi = "> 16 km/h", sprint = "> 20 km/h", set = "SoccerMon", vmax = "vitesse max")
+  list(metrics = m, labels = labels)
 }

@@ -193,8 +193,8 @@ fig_player_gps <- function(metrics, player_id) {
   if (nrow(d) == 0) return(NULL)
   long <- bind_rows(
     d |> transmute(date, panel = "Distance totale (km)", value = total_km),
-    d |> transmute(date, panel = "Course > 16 km/h (m)", value = hsr_m),
-    d |> transmute(date, panel = "Sprint > 20 km/h (m)", value = sprint_m))
+    d |> transmute(date, panel = paste0("Haute intensité ", GPS_LABELS$hi, " (m)"), value = gps_hi_m),
+    d |> transmute(date, panel = paste0("Sprint ", GPS_LABELS$sprint, " (m)"), value = gps_sprint_m))
   long$panel <- factor(long$panel, levels = unique(long$panel))
   ggplot(long, aes(date, value)) +
     geom_col(fill = COL$blue, width = 1) +
@@ -236,5 +236,72 @@ fig_exposure <- function(metrics, cfg = CONFIG) {
          x = "Charge chronique / normale de la joueuse", y = "ACWR (EWMA)",
          caption = sprintf("Bande grise : zone %s–%s. Pointillés : base basse (< %s %%) et haute (> %s %%). Valeurs plafonnées pour la lisibilité.",
                            cfg$acwr_low, cfg$acwr_high, 100 * cfg$base_low, 100 * cfg$base_high)) +
+    theme_perf()
+}
+
+# 9. Retour au jeu : courbes de reprise -------------------------------------------
+# Chaque semaine après la reprise, rapportée à la référence de la joueuse
+# (28 jours avant l'absence). Médiane et intervalle interquartile.
+fig_return_curves <- function(summary, min_n = 5) {
+  if (is.null(summary) || nrow(summary) == 0) return(NULL)
+  lab <- c(srpe = "Charge perçue (sRPE)", hsr = paste("Haute intensité", if (exists("GPS_LABELS") && !is.null(GPS_LABELS)) GPS_LABELS$hi else ""),
+           vmax = "Vitesse max", explo = "Explosivité (temps jusqu'à 19 km/h)",
+           a0 = "Accélération max théorique (A0)", s0 = "Vitesse max théorique (S0)")
+  d <- summary |> filter(n >= min_n) |>
+    mutate(metric = factor(lab[metric], levels = lab),
+           type = factor(paste("Absence", type), levels = c("Absence individuelle", "Absence collective")))
+  if (nrow(d) == 0) return(NULL)
+  ggplot(d, aes(week, med, colour = type, fill = type)) +
+    geom_hline(yintercept = 1, colour = COL$ink2, linewidth = 0.3) +
+    geom_hline(yintercept = 0.9, colour = COL$ink2, linewidth = 0.3, linetype = "dashed") +
+    geom_ribbon(aes(ymin = q1, ymax = q3), alpha = 0.15, colour = NA) +
+    geom_line(linewidth = 1) + geom_point(size = 1.8) +
+    facet_wrap(~ metric, nrow = 1, drop = TRUE) +
+    scale_colour_manual(values = c("Absence individuelle" = COL$blue, "Absence collective" = COL$orange), name = NULL) +
+    scale_fill_manual(values = c("Absence individuelle" = COL$blue, "Absence collective" = COL$orange), name = NULL) +
+    scale_y_continuous(labels = scales::percent) +
+    scale_x_continuous(breaks = 1:8) +
+    labs(title = "Retour au jeu : semaines après une absence d'au moins 14 jours",
+         subtitle = "Chaque semaine rapportée à la référence de la joueuse (28 jours avant l'absence). Médiane et intervalle interquartile.",
+         x = "Semaine après la reprise", y = "% de la référence",
+         caption = sprintf("Courbes affichées quand au moins %d reprises sont disponibles. Pointillés : 90 %% de la référence.", min_n)) +
+    theme_perf()
+}
+
+# 10. Seuils masculins ou féminins : couverture --------------------------------
+fig_threshold_coverage <- function(th) {
+  if (is.null(th) || is.null(th$curves)) return(NULL)
+  d <- th$curves |> filter(key %in% c("sprint_dist", "acc_high")) |>
+    mutate(set_type = ifelse(grepl("féminin", set), "Seuil féminin", "Seuil masculin"))
+  if (nrow(d) == 0) return(NULL)
+  lab <- d |> group_by(metric, set_type) |> slice_max(share, n = 1, with_ties = FALSE) |> ungroup()
+  ggplot(d, aes(x, share, colour = set_type)) +
+    geom_line(linewidth = 1) +
+    geom_text(data = lab, aes(label = set), hjust = -0.05, vjust = -0.6, size = 3.2, show.legend = FALSE) +
+    facet_wrap(~ metric, scales = "free_x") +
+    scale_colour_manual(values = c("Seuil féminin" = COL$blue, "Seuil masculin" = COL$ink2), name = NULL) +
+    scale_y_continuous(labels = scales::percent, limits = c(0, 1.05)) +
+    labs(title = "Seuils masculins ou féminins : ce qui reste visible",
+         subtitle = "Part des jours-joueuses (GPS, entraînements et matchs) qui dépassent chaque valeur",
+         x = NULL, y = "Part des jours",
+         caption = "Seuils féminins présentés par SkillCorner (webinaire public du 12/10/2026). Données SoccerMon, deux équipes de Toppserien.") +
+    theme_perf()
+}
+
+# 11. Profils cachés : rang avec les seuils masculins et féminins ---------------
+fig_threshold_ranks <- function(th, key_metric = "acc_high") {
+  if (is.null(th) || is.null(th$ranks)) return(NULL)
+  d <- th$ranks |> filter(key == key_metric)
+  if (nrow(d) < 8) return(NULL)
+  hid <- d |> filter(pct_men <= 25, pct_women >= 50)
+  ggplot(d, aes(pct_men, pct_women)) +
+    annotate("rect", xmin = -Inf, xmax = 25, ymin = 50, ymax = Inf, fill = COL$zone) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = COL$ink2, linewidth = 0.3) +
+    geom_point(colour = COL$blue, size = 2.2, alpha = 0.8) +
+    geom_text(data = hid, aes(label = label), vjust = -0.8, size = 3.2, colour = COL$ink) +
+    coord_equal(xlim = c(0, 100), ylim = c(0, 100)) +
+    labs(title = paste0(d$metric[1], " : rang de chaque joueuse selon le seuil"),
+         subtitle = "Percentile avec le seuil masculin (abscisse) et féminin (ordonnée). Zone grisée : mal classée avec le seuil masculin, au-dessus de la médiane avec le seuil féminin.",
+         x = "Percentile, seuil masculin", y = "Percentile, seuil féminin") +
     theme_perf()
 }

@@ -66,8 +66,8 @@ conclusion causale (voir *Limites*).
 **5. Charge externe : ce que la joueuse a fait, et comment elle l'a vécu.**
 Les 10 075 fichiers GPS (10 Hz, ~99 Go) ont été agrégés en 9 908 jours-joueuses
 (86 séances trop courtes écartées, aucun fichier illisible). Valeurs médianes par
-jour : ~4,8 km, ~270 m au-dessus de 16 km/h, ~60 m de sprint au-dessus de 20 km/h,
-vitesse maximale ~23,5 km/h. La charge perçue (sRPE) et la distance sont
+jour : ~4,8 km, ~95 m au-dessus de 19 km/h, 7 à 9 m de sprint au-dessus de 23 km/h (seuils féminins, cf. résultat 8),
+vitesse maximale maintenue 1 s ~22,8 km/h. La charge perçue (sRPE) et la distance sont
 **modérément corrélées (r = 0,52 et 0,46 selon l'équipe)** : à distance égale, une
 séance peut être vécue très différemment, ce qui justifie de suivre les deux. Le nuage
 de points fait aussi apparaître des bandes horizontales vers 10–15 km et 700–900 UA,
@@ -90,18 +90,102 @@ rapportée à la normale de la joueuse (médiane de l'année précédente).
   jours d'alerte « sous-charge » surviennent sur une base déjà basse : une
   **sous-exposition durable** plus qu'un creux passager. Chaque alerte porte
   désormais ce contexte (`outputs/tables/points_attention.csv`, colonne `contexte`).
-- **ACWR de la charge externe** (course > 16 km/h, sprint > 20 km/h) : sur 5 071
-  jours-joueuses où les deux ratios sont interprétables (44 joueuses), l'ACWR sRPE
-  et l'ACWR de course rapide ne sont que modérément corrélés (**r = 0,41**). Dans
-  **92 %** des 245 jours où l'ACWR de course rapide dépasse 1,5, l'ACWR sRPE reste
+- **ACWR de la charge externe** (haute intensité > 19 km/h, sprint > 23 km/h) : sur
+  5 071 jours-joueuses où les deux ratios sont interprétables (44 joueuses), l'ACWR
+  sRPE et l'ACWR de haute intensité sont faiblement corrélés (**r = 0,33**). Dans
+  **94 %** des jours où l'ACWR de haute intensité dépasse 1,5, l'ACWR sRPE reste
   sous ce seuil : **la charge perçue seule ne voit pas ces pics de course à haute
   intensité.**
 
 Dans le tableau de bord : tableau « Ratio et valeurs absolues » et choix de
-l'indicateur (sRPE, course rapide, sprint) dans la vue joueuse, graphique ratio /
+l'indicateur (sRPE, haute intensité, sprint) dans la vue joueuse, graphique ratio /
 niveau de base dans la vue équipe.
 
 ![Ratio et niveau de la base](docs/figures/ratio_et_base.png)
+
+**7. Retour au jeu : comment une joueuse retrouve son niveau après une absence.**
+Une absence est une période d'au moins 14 jours sans charge déclarée ni GPS. Elle
+est *individuelle* si au moins la moitié de l'équipe s'entraîne pendant ce temps
+(blessure, maladie, sélection…), *collective* sinon (intersaison, coupure). Chaque
+semaine après la reprise est comparée aux 28 jours qui précèdent l'absence, la
+référence propre de la joueuse.
+
+- **34 absences individuelles** (médiane 27 jours, dont 6 avec une blessure
+  déclarée) et 40 collectives. Après une absence individuelle, la charge perçue
+  reprend progressivement : **59 % de la référence la 1ʳᵉ semaine, 76 % la 2ᵉ,
+  retour au niveau d'avant la 3ᵉ** (médianes sur 26 reprises).
+- Après une coupure collective, c'est l'inverse : **148 % de la charge d'avant
+  la coupure dès la 1ʳᵉ semaine**, avec une vitesse maximale déjà à 100 %.
+- **Les alertes d'ACWR se taisent au moment où elles seraient le plus utiles.**
+  Dans les 4 semaines qui suivent une reprise individuelle, l'ACWR est masqué
+  **73 % des jours** (trop peu de jours documentés sur 28 jours), alors que le
+  ratio brut dépasse 1,5 sur 38 % des jours. Le suivi de reprise, comparé à la
+  référence d'avant l'absence, prend le relais.
+- **Point de méthode** : comparer le maximum d'une semaine au maximum des 4
+  semaines de référence crée un faux déficit (plus de séances = maximum plus
+  élevé). La référence de vitesse maximale est donc la médiane des maxima
+  hebdomadaires. Sans cette correction, la vitesse paraissait plafonner à ~94 %
+  après chaque coupure ; avec, elle est à ~100 % dès la 1ʳᵉ semaine.
+- **Profil accélération-vitesse mesuré en séance** (Morin et al., 2021) : à partir
+  des fichiers GPS bruts, accélération maximale atteinte par tranche de vitesse,
+  puis droite ajustée → A0 (accélération maximale théorique) et S0 (vitesse
+  maximale théorique), en gardant les deux accélérations les plus élevées par
+  tranche de 0,2 m/s comme dans la méthode d'origine. Méthode validée sur des
+  sprints simulés à profil connu (A0 et S0 retrouvés à 4 % près). Sur SoccerMon,
+  à interpréter avec prudence : une accélération dérivée d'un GPS à 10 Hz reste
+  bruitée, et les séances d'entraînement ne contiennent pas toujours d'effort maximal.
+
+Limites : SoccerMon ne donne ni la cause des absences ni de diagnostic (aucune
+rupture du LCA identifiable). Le GPS ne couvre qu'environ 60 % des séances :
+seules 5 reprises individuelles ont assez de GPS pour suivre la vitesse maximale,
+trop peu pour conclure sur ce point.
+
+![Retour au jeu](docs/figures/retour_au_jeu.png)
+
+**8. Seuils féminins : ce que les seuils masculins font disparaître.**
+Les métriques physiques reprennent souvent des seuils calibrés sur le football
+masculin (sprint > 25 km/h, accélération haute > 3 m/s²). Le projet utilise
+désormais des seuils calibrés sur le football féminin d'élite : course
+13–19 km/h, haute intensité > 19 km/h, sprint > 23 km/h, accélération haute
+> 2,7 m/s².
+
+> **Source des seuils féminins.** Ils ont été présentés par SkillCorner lors du
+> webinaire public « Women's Football: Dedicated Data, Smarter Decisions »
+> (12 octobre 2026), dont la présentation a été transmise à toutes les personnes
+> inscrites. SkillCorner les a validés en match, par tracking vidéo, sur
+> 13 championnats féminins. Ce projet refait la même vérification, de façon
+> indépendante, sur le GPS de SoccerMon.
+
+SoccerMon couvre deux équipes de Toppserien (Norvège), l'un des championnats de
+cette étude, mais en GPS et sur les entraînements comme sur les matchs. Sur
+7 879 jours-joueuses (46 joueuses classées) :
+
+| | Seuil masculin | Seuil féminin |
+|---|---|---|
+| Jours avec au moins un mètre de sprint | 44 % (> 25 km/h) | **67 %** (> 23 km/h) |
+| Distance de sprint médiane par jour | 0 m | **7,8 m** |
+| Jours avec au moins une accélération haute | 43 % (> 3 m/s²) | **65 %** (> 2,7 m/s²) |
+| Accélérations hautes médianes par jour | 0 | **1** |
+
+- **Couverture : le résultat de SkillCorner se retrouve.** Avec les seuils
+  masculins, plus de la moitié des journées valent 0 en sprint et en
+  accélérations hautes ; avec les seuils féminins, deux tiers des journées
+  deviennent mesurables.
+- **Classement des joueuses : peu de différence ici.** Le classement par
+  accélérations hautes est presque identique avec les deux seuils (corrélation
+  de rang 0,96), et aucune joueuse ne passe du quart inférieur à la moitié
+  supérieure. SkillCorner travaille match par match, où les efforts rares valent
+  souvent 0 ; ici, les moyennes portent sur des dizaines de jours par joueuse,
+  ce qui lisse cet effet.
+- **Stabilité** : même avec 20 jours par joueuse, le classement ne se reproduit
+  pas d'un échantillon de jours à l'autre (corrélation < 0,8), avec les deux
+  seuils. À l'entraînement, le volume de sprint dépend surtout du contenu de la
+  séance, plus que de la joueuse.
+
+Les seuils SoccerMon (16 et 20 km/h) et masculins restent calculés et exportés
+pour comparaison (`outputs/tables/seuils_*.csv`).
+
+![Seuils masculins et féminins](docs/figures/seuils_couverture.png)
 
 ## Ce que fait le pipeline
 
@@ -113,7 +197,10 @@ niveau de base dans la vue équipe.
 | Visualisation | vue qualité, vue équipe (charge hebdomadaire), vue joueuse (charge + ACWR, wellness), profil pré-blessure | `R/04_figures.R` |
 | Rapport | rapport HTML autonome à destination du staff | `report/rapport_charge.Rmd` |
 | Tableau de bord | export des données (`docs/data.js`) pour la page web interactive `docs/index.html`, publiée avec GitHub Pages | `R/05_dashboard.R` |
-| Charge externe (GPS) | lecture des ~10 000 fichiers GPS (un par joueuse et par jour), distance totale, course > 16 km/h, sprint > 20 km/h, vitesse max, accélérations et décélérations > 2 m/s² | `R/06_gps.R`, `run_gps.R` |
+| Retour au jeu | absences d'au moins 14 jours (individuelles ou collectives), référence des 28 jours précédents, courbes de reprise semaine par semaine (sRPE, haute intensité, vitesse max, profil A-S) | `R/07_return.R` |
+| Profil accélération-vitesse | accélération maximale par tranche de 0,2 m/s à partir du GPS brut, ajustement A0 / S0 (Morin et al., 2021) | `R/08_as_profile.R` (calculé par `run_gps.R`) |
+| Seuils masculins / féminins | couverture, stabilité du classement des joueuses et profils cachés selon les seuils | `R/09_thresholds.R` |
+| Charge externe (GPS) | lecture des ~10 000 fichiers GPS (un par joueuse et par jour), distance totale, bandes de vitesse SoccerMon, féminines et masculines, vitesse max maintenue 1 s, explosivité (temps jusqu'à 19 km/h), vitesse max, accélérations et décélérations > 2 m/s² | `R/06_gps.R`, `run_gps.R` |
 
 Tous les seuils (fenêtres, zone d'ACWR, monotonie, seuil wellness, couverture
 minimale) sont réglables dans `R/00_config.R`.
@@ -176,10 +263,17 @@ puis lancer une seule fois :
 ```bash
 Rscript run_gps.R ~/Desktop/SoccerMon_GPS
 ```
-Le script lit les fichiers en parallèle (10 à 30 min selon la machine), peut être
-interrompu et relancé sans tout refaire, et écrit une petite table
-`data/processed/gps_daily.csv` (une ligne par joueuse et par jour), versionnée dans le
-dépôt : le reste du pipeline n'a plus besoin des 99 Go.
+Le script lit chaque fichier une seule fois, en parallèle (10 à 30 min selon la
+machine), peut être interrompu et relancé sans tout refaire, et écrit dans
+`data/processed/` :
+- `gps_daily.csv` : une ligne par joueuse et par jour, avec les seuils SoccerMon
+  (16 / 20 km/h), féminins (13 / 19 / 23 km/h, 1,4 / 2,7 m/s²) et masculins
+  (25 km/h, 3 m/s²), la vitesse max maintenue 1 s et l'explosivité ;
+- `as_sessions.csv` : accélération maximale par tranche de vitesse et par séance
+  (profil accélération-vitesse du module « Retour au jeu »).
+
+Ces tables sont versionnées dans le dépôt : le reste du pipeline n'a plus besoin
+des 99 Go.
 
 ### 3. Exécution
 ```bash
@@ -219,6 +313,8 @@ uniquement à vérifier que le code tourne.
 
 ## Références
 
+- SkillCorner (2026). *Women's Football: Dedicated Data, Smarter Decisions*, webinaire public du 12 octobre 2026 (seuils de vitesse et d'accélération féminins).
+- Morin J.-B. et al. (2021). In situ profiling of acceleration-speed. *Sports Biomechanics*.
 - Midoglu C. et al. (2024). *A large-scale multivariate soccer athlete health, performance, and position monitoring dataset.* Scientific Data, 11, 553.
 - Foster C. (1998). Monitoring training in athletes with reference to overtraining syndrome. *MSSE*.
 - Foster C. et al. (2001). A new approach to monitoring exercise training. *JSCR*.
