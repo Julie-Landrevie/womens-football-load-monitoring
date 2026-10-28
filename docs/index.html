@@ -154,6 +154,7 @@ table.expo td.read { white-space: normal; min-width: 220px; color: var(--ink-2);
 .lvl.basse { border-color: var(--s-blue); }
 .lvl.haute { border-color: var(--s-orange); }
 td.pct-low { color: var(--alert); font-weight: 600; }
+.jalons { white-space: nowrap; font-size: 0.85em; line-height: 1.35; }
 .ret-legend { display: inline-flex; align-items: center; gap: 6px; }
 .ret-legend i { width: 14px; height: 10px; background: var(--empty); border: 1px solid var(--line); display: inline-block; border-radius: 2px; }
 .prose { max-width: 75ch; }
@@ -297,7 +298,7 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
 
     <div id="ret-player-block" hidden>
       <h2>Reprises après une absence</h2>
-      <p class="hint">Absences d'au moins 14 jours sans charge ni GPS. Chaque semaine après la reprise est comparée aux 28 jours qui précèdent l'absence (100 % = son niveau d'avant). En rouge : sous 90 %. — : pas assez de données GPS cette semaine-là.</p>
+      <p class="hint">Absences d'au moins 14 jours sans charge ni GPS. Chaque semaine après la reprise est comparée aux 28 jours qui précèdent l'absence (100 % = son niveau d'avant). En rouge : sous 90 %. — : pas assez de données GPS cette semaine-là. Dernière colonne : jour où chaque qualité retrouve 90 % de son niveau d'avant (J1 = jour de la reprise, fenêtre glissante de 7 jours, donc J7 au plus tôt).</p>
       <div class="table-wrap"><table class="expo" id="ret-table"></table></div>
     </div>
   </section>
@@ -358,6 +359,24 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
       </div>
       <div class="prose" id="ret-text"></div>
     </div>
+    <div id="ms-block" hidden>
+      <h2>Reprendre sur des critères, pas sur un calendrier</h2>
+      <p class="hint">Le consensus UEFA sur le LCA dans le football féminin (partie 2, Verhagen et al., <em>Science and Medicine in Football</em>, 2026) recommande une reprise fondée sur des critères plutôt que sur un calendrier, avec une réexposition progressive aux exigences du jeu. Ici, chaque reprise est lue par jalons : le jour où chaque qualité retrouve 90 % de son niveau d'avant l'absence (fenêtre glissante de 7 jours, J7 au plus tôt). Médiane de Kaplan-Meier : les jalons non atteints dans les 56 jours suivis sont pris en compte.</p>
+      <div class="two-col">
+        <div class="panel"><p class="chart-title">Jours pour retrouver 90 % de son niveau d'avant</p><p class="chart-sub">Médiane de Kaplan-Meier, indicateurs avec au moins 5 reprises mesurables</p><div id="r-ms" class="chart"></div></div>
+        <div class="prose" id="ms-text"></div>
+      </div>
+      <div class="table-wrap" style="margin-top:14px"><table class="expo" id="ms-table"></table></div>
+    </div>
+    <div id="opp-block" hidden>
+      <h2>Comparer à opportunités égales : l'effort relatif</h2>
+      <p class="hint">Un jour de match, toute l'équipe court beaucoup ; un jour de récupération, personne. Le volume brut mesure donc d'abord le type de séance et le nombre de séances suivies. L'effort relatif situe chaque joueuse dans son équipe présente le même jour (percentile parmi les joueuses de champ, au moins 8 avec GPS). Normalisation par l'opportunité d'après Bozděch (2026, <em>PLOS ONE</em>).</p>
+      <div class="two-col">
+        <div class="panel"><p class="chart-title">Haute intensité : stabilité du classement</p><p class="chart-sub">Corrélation de rang entre deux séries de jours disjointes</p><div id="r-opp-hi" class="chart"></div></div>
+        <div class="panel"><p class="chart-title">Sprint : stabilité du classement</p><p class="chart-sub">Corrélation de rang entre deux séries de jours disjointes</p><div id="r-opp-sprint" class="chart"></div></div>
+      </div>
+      <div class="prose" id="opp-text"></div>
+    </div>
     <div id="expo-block" hidden>
       <h2>Même ACWR, exposition différente</h2>
       <div class="prose" id="expo-text"></div>
@@ -384,6 +403,8 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 30px; color: var(--i
       <dt>Vitesse max et explosivité</dt><dd>Vitesse max = vitesse la plus élevée maintenue au moins 1 seconde (robuste aux pics GPS isolés). Explosivité = meilleur temps pour passer de moins de 2 m/s à 19 km/h, en moins de 5 secondes.</dd>
       <dt>ACWR de la charge externe</dt><dd>Même calcul (EWMA 7 j / 28 j) sur la distance de haute intensité et de sprint. Un jour sans GPS ni charge déclarée compte 0 m (repos) ; un jour sans GPS mais avec une charge déclarée est manquant (séance non captée). Ratio affiché seulement si au moins 70 % des jours actifs des 28 derniers jours ont un fichier GPS.</dd>
       <dt>Retour au jeu</dt><dd>Absence = au moins 14 jours consécutifs sans charge déclarée ni fichier GPS. Individuelle si au moins la moitié de l'équipe s'entraîne pendant ce temps, collective sinon (intersaison, coupure). Chaque semaine après la reprise est rapportée aux 28 jours précédant l'absence : charge perçue, course au-dessus de 16 km/h et vitesse maximale. Pour la vitesse max, la référence est la médiane des maxima hebdomadaires (un maximum sur 4 semaines serait mécaniquement plus élevé qu'un maximum sur une semaine).</dd>
+      <dt>Jalons de reprise</dt><dd>Pour chaque reprise, chaque jour à partir de J7 (J1 = jour de la reprise), les 7 derniers jours sont comparés à la référence d'avant l'absence : jour où la charge perçue, la haute intensité, le sprint et la vitesse max retrouvent 90 % puis 100 % de cette référence. Suivi jusqu'à J56 ou jusqu'à l'absence suivante. Vitesse max jugée seulement sur une fenêtre d'au moins 3 séances GPS (avec 1 ou 2 séances, 39 % de faux déficits sur des semaines sans absence). Médiane de Kaplan-Meier pour tenir compte des jalons non atteints.</dd>
+      <dt>Effort relatif</dt><dd>Percentile de la joueuse parmi les joueuses de champ de son équipe présentes le même jour (au moins 8 avec GPS). Jalon « sa place dans le groupe » : sur 7 jours, sa distance rapportée à celle de la joueuse médiane de l'équipe retrouve 90 % de ce qu'elle était dans les 28 jours avant l'absence.</dd>
       <dt>Profil accélération-vitesse</dt><dd>Mesuré en séance à partir du GPS brut (Morin et al., 2021) : par tranche de vitesse de 0,2 m/s, accélération la plus élevée atteinte, puis droite ajustée au-delà de 3 m/s. A0 = accélération maximale théorique, S0 = vitesse maximale théorique.</dd>
       <dt>Monotonie</dt><dd>Moyenne ÷ écart-type de la charge sur 7 jours. Au-dessus de 2 : peu de variation d'un jour à l'autre.</dd>
       <dt>Wellness</dt><dd>Fatigue, humeur, disponibilité, sommeil, douleurs et stress, chacun comparé aux 28 jours précédents de la même joueuse (z-score), puis moyennés.</dd>
@@ -496,7 +517,7 @@ function readRatio(r, b) {
   return lv === "basse" ? "Progression régulière, mais à un niveau bas pour elle" : lv === "haute" ? "Charge stable à un niveau élevé pour elle" : "Charge habituelle";
 }
 const RET = D.returns || null;
-const retEpisodes = (id) => { if (!RET || !RET.episodes) return []; const e = RET.episodes; return e.id.map((x, i) => x === id ? { type: e.type[i], start: e.start[i], end: e.end[i], ret: e.ret[i], days: e.days[i], injury: e.injury[i] } : null).filter(Boolean); };
+const retEpisodes = (id) => { if (!RET || !RET.episodes) return []; const e = RET.episodes; return e.id.map((x, i) => x === id ? { type: e.type[i], start: e.start[i], end: e.end[i], ret: e.ret[i], days: e.days[i], injury: e.injury[i], jalons: e.jalons ? e.jalons[i] : null } : null).filter(Boolean); };
 const retCurve = (id, ret) => (RET && RET.curves || []).find((c) => c.id === id && c.ret === ret);
 const pctCell = (v) => v == null ? '<td class="r muted">—</td>' : `<td class="r${v < 0.9 ? " pct-low" : ""}">${Math.round(v * 100)}&nbsp;%</td>`;
 const lastIdx = (arr, i0, i1) => { if (!arr) return -1; for (let j = i1; j >= i0; j--) if (arr[j] != null) return j; return -1; };
@@ -761,12 +782,12 @@ function renderPlayer() {
   if (eps.length) {
     const wk = [1, 2, 3, 4];
     const head = "<thead><tr><th>Reprise le</th><th class='r'>Absence</th><th>Type</th>" +
-      wk.map((k) => `<th class='r'>sRPE S${k}</th>`).join("") + wk.map((k) => `<th class='r'>Vmax S${k}</th>`).join("") + "</tr></thead>";
+      wk.map((k) => `<th class='r'>sRPE S${k}</th>`).join("") + wk.map((k) => `<th class='r'>Vmax S${k}</th>`).join("") + "<th>Jalons à 90 %</th></tr></thead>";
     const body = eps.map((e) => {
       const c = retCurve(id, e.ret);
       const at = (key, k) => { if (!c) return null; const j = c.week.indexOf(k); return j < 0 ? null : c[key][j]; };
       return `<tr><td>${frDate(e.ret)}</td><td class="r">${e.days} j</td><td>${e.type}${e.injury ? " · blessure déclarée" : ""}</td>` +
-        wk.map((k) => pctCell(at("srpe", k))).join("") + wk.map((k) => pctCell(at("vmax", k))).join("") + "</tr>";
+        wk.map((k) => pctCell(at("srpe", k))).join("") + wk.map((k) => pctCell(at("vmax", k))).join("") + `<td class="jalons">${e.jalons ? e.jalons.split(" · ").map((t) => t.replace(" 90 % :", "")).join("<br>") : '<span class="muted">—</span>'}</td></tr>`;
     }).join("");
     $("#ret-table").innerHTML = head + "<tbody>" + body + "</tbody>";
   }
@@ -905,6 +926,77 @@ function renderReturns() {
     <p><strong>Pourquoi un suivi dédié ?</strong> Dans les 4 semaines qui suivent une reprise individuelle, l'ACWR est masqué ${p(st.acwr_masked_after_return)} des jours (trop peu de jours documentés sur 28 jours), alors que le ratio brut dépasse 1,5 sur ${p(st.acwr_raw_high_after_return)} des jours. Les alertes d'ACWR se taisent au moment où la progressivité compte le plus : la comparaison à la référence d'avant l'absence prend le relais.</p>
     <p class="muted">Limites : SoccerMon ne donne ni la cause des absences ni de diagnostic. Le GPS ne couvre qu'environ 60 % des séances : seules ${st.gps_curves_individual} reprises individuelles ont assez de GPS pour suivre la vitesse maximale, trop peu pour conclure sur ce point.</p>`;
 }
+const MS_LAB = { srpe: "Charge perçue (sRPE)", hi: "Haute intensité " + GL.hi, sprint: "Sprint " + GL.sprint, vmax: "Vitesse max (1 s)",
+  acc: "Accélérations > 2,7 m/s²", total: "Distance totale" };
+const dayTxt = (x) => x == null || isNaN(x) ? "non atteinte" : "J" + nf(x, x % 1 ? 1 : 0);
+function renderMilestones() {
+  const M = RET && RET.milestones;
+  $("#ms-block").hidden = !(M && M.summary);
+  if (!M || !M.summary) return;
+  const S = M.summary, keys = ["srpe", "hi", "sprint", "vmax"];
+  const at = (type, metric, level) => { const i = S.type.findIndex((t, j) => t === type && S.metric[j] === metric && S.level[j] === level); return i < 0 ? null : i; };
+  const bars = (type, color) => {
+    const idx = keys.map((k) => at(type, k, 0.9)).filter((i) => i != null && S.n[i] >= 5);
+    return { type: "bar", orientation: "h", name: type === "individuelle" ? "Absence individuelle" : "Reprise de saison (collective)",
+      y: idx.map((i) => MS_LAB[S.metric[i]].replace(/ (> [^ ]+ [^ ]+|\(.*\))$/, "<br>$1")), x: idx.map((i) => S.km_median_day[i]), marker: { color },
+      text: idx.map((i) => dayTxt(S.km_median_day[i])), textposition: "outside", cliponaxis: false,
+      customdata: idx.map((i) => [S.n[i], S.reached[i]]),
+      hovertemplate: "%{y} : %{text}<br>%{customdata[1]} jalons atteints sur %{customdata[0]} reprises<extra></extra>" };
+  };
+  plot("r-ms", [bars("collective", css("--s-orange")), bars("individuelle", css("--s-blue"))],
+    baseLayout({ height: 320, barmode: "group", hovermode: "closest", showlegend: true, legend: { orientation: "h", y: 1.02, yanchor: "bottom", x: 0 },
+      margin: { l: 120, r: 40, t: 50, b: 40 },
+      xaxis: { title: { text: "Jours après la reprise" }, dtick: 7, rangemode: "tozero", gridcolor: css("--line"), zeroline: false },
+      yaxis: { autorange: "reversed", gridcolor: css("--line") } }));
+  const row = (type) => keys.map((k) => { const a = at(type, k, 0.9), b = at(type, k, 1);
+    if (a == null) return "";
+    return `<tr><td>${type === "individuelle" ? "Individuelle" : "Collective"}</td><td>${MS_LAB[k]}</td><td class="r">${S.n[a]}</td>
+      <td class="r"><strong>${dayTxt(S.km_median_day[a])}</strong></td><td class="r">${pct(S.share_not_reached[a])}</td>
+      <td class="r">${b == null ? "—" : dayTxt(S.km_median_day[b])}</td></tr>`; }).join("");
+  $("#ms-table").innerHTML = "<thead><tr><th>Absence</th><th>Indicateur</th><th class='r'>Reprises mesurables</th><th class='r'>90 % (médiane)</th><th class='r'>90 % non atteint</th><th class='r'>100 % (médiane)</th></tr></thead><tbody>" + row("individuelle") + row("collective") + "</tbody>";
+  const O = M.order || null;
+  const ord = (type, a, b) => { if (!O) return null; const i = O.type.findIndex((t, j) => t === type && O.a[j] === a && O.b[j] === b); return i < 0 ? null : { n: O.n[i], a: O.a_first[i], same: O.same_day[i], b: O.b_first[i] }; };
+  const g = (k, type, lv = 0.9) => { const i = at(type, k, lv); return i == null ? {} : { n: S.n[i], d: S.km_median_day[i], r: S.reached[i] }; };
+  const si = g("srpe", "individuelle"), hi = g("hi", "individuelle");
+  const cs = g("srpe", "collective"), ch = g("hi", "collective"), cp = g("sprint", "collective"), cv = g("vmax", "collective");
+  const sv = ord("collective", "sprint", "vmax");
+  let h = `<p><strong>Après une absence individuelle</strong>, la charge perçue retrouve 90 % de son niveau d'avant en <strong>${dayTxt(si.d)}</strong> (${si.r} reprises sur ${si.n}). La lecture par semaine disait la même chose autrement : un jalon se lit pour chaque joueuse, le jour où il est atteint.</p>`;
+  if (cp.n) h += `<p><strong>Après une reprise de saison</strong> (${cs.n} reprises), la charge perçue revient en ${dayTxt(cs.d)}, la haute intensité en ${dayTxt(ch.d)}, la vitesse max en ${dayTxt(cv.d)}, mais le volume de sprint seulement en <strong>${dayTxt(cp.d)}</strong>.` +
+    (sv ? ` La vitesse max revient avant le volume de sprint ${sv.b} fois sur ${sv.n}, le même jour ${sv.same} fois, ${sv.a ? "après " + sv.a + " fois" : "jamais après"} : atteindre sa vitesse de pointe une fois ne veut pas dire répéter les sprints.` : "") + `</p>`;
+  h += `<p class="muted">Limites : seulement ${hi.n || 0} reprises individuelles ont assez de GPS pour les jalons de haute intensité, de sprint et de vitesse max (vitesse max jugée seulement sur une fenêtre d'au moins 3 séances GPS) : pas de conclusion sur ces jalons. Les reprises collectives sont des reprises de saison, pas des retours de blessure. Ces jalons de charge complètent les critères cliniques du consensus (force, tests de saut, préparation psychologique), mesurés par le club : ils ne les remplacent pas.</p>`;
+  $("#ms-text").innerHTML = h;
+}
+function renderOpportunity() {
+  const O = D.opportunity;
+  $("#opp-block").hidden = !(O && O.stability);
+  if (!O || !O.stability) return;
+  const S = O.stability;
+  const vlab = { brut: "Volume brut", ratio: "Ratio à la médiane de l'équipe", percentile: "Percentile dans l'équipe" };
+  const vcol = { brut: css("--ink-3"), ratio: css("--s-blue-light"), percentile: css("--s-blue") };
+  const lines = (metric) => ["brut", "percentile"].map((v) => {
+    const idx = S.metric.map((m, i) => m === metric && S.version[i] === v ? i : -1).filter((i) => i >= 0);
+    return { type: "scatter", mode: "lines+markers", name: vlab[v], x: idx.map((i) => S.n_days[i]), y: idx.map((i) => S.rho[i]),
+      line: { color: vcol[v], width: 2.4, dash: v === "brut" ? "dot" : "solid" }, marker: { size: 6 },
+      hovertemplate: vlab[v] + " · %{x} jours : %{y:.2f}<extra></extra>" }; });
+  const lay = baseLayout({ height: 280, hovermode: "closest", showlegend: true, legend: { orientation: "h", y: 1.15, x: 0 },
+    shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0.8, y1: 0.8, line: { color: css("--ink-3"), width: 1, dash: "dot" } }],
+    xaxis: { title: { text: "Jours par série" }, gridcolor: css("--line"), zeroline: false }, yaxis: { range: [0, 1], gridcolor: css("--line"), zeroline: false } });
+  plot("r-opp-hi", lines("hi"), lay);
+  plot("r-opp-sprint", lines("sprint"), lay);
+  const rho = (m, v, n) => { const i = S.metric.findIndex((x, j) => x === m && S.version[j] === v && S.n_days[j] === n); return i < 0 ? null : S.rho[i]; };
+  const R = O.ranks;
+  const moved = (m) => { if (!R) return null; const idx = R.metric.map((x, i) => x === m ? i : -1).filter((i) => i >= 0);
+    return { n: idx.length, k: idx.filter((i) => Math.abs(R.pct_relatif[i] - R.pct_brut[i]) >= 20).length }; };
+  const mt = moved("total"), mh = moved("hi");
+  let h = `<p><strong>Un classement plus reproductible.</strong> Sur 20 jours, la corrélation entre deux séries de jours passe de ${nf(rho("hi", "brut", 20), 2)} à <strong>${nf(rho("hi", "percentile", 20), 2)}</strong> pour la haute intensité, et de ${nf(rho("sprint", "brut", 20), 2)} à <strong>${nf(rho("sprint", "percentile", 20), 2)}</strong> pour le sprint, une fois le contenu de la séance neutralisé. Pour les accélérations, pas de gain (${nf(rho("acc", "brut", 20), 2)} contre ${nf(rho("acc", "percentile", 20), 2)}).</p>`;
+  if (mt) h += `<p><strong>Des joueuses qui changent de place.</strong> ${mt.k} joueuses sur ${mt.n} bougent d'au moins 20 points de percentile entre le volume brut et l'effort relatif pour la distance totale, ${mh.k} sur ${mh.n} pour la haute intensité : en brut, la distance totale suit surtout le nombre de séances suivies.</p>`;
+  const G = O.returns;
+  if (G) { const f = (type, metric, j) => { const i = G.type.findIndex((t, k) => t === type && G.metric[k] === metric && G.jalon[k] === j); return i < 0 ? null : G.km_median_day[i]; };
+    const nc = (() => { const i = G.type.findIndex((t, k) => t === "collective" && G.metric[k] === "hi" && G.jalon[k] === "sa place dans le groupe"); return i < 0 ? 0 : G.n[i]; })();
+    h += `<p><strong>Retour au jeu.</strong> Après une reprise de saison (${nc} reprises), retrouver sa place dans le groupe et retrouver son niveau d'avant vont de pair : haute intensité ${dayTxt(f("collective", "hi", "sa place dans le groupe"))} contre ${dayTxt(f("collective", "hi", "son niveau d'avant"))}, sprint ${dayTxt(f("collective", "sprint", "sa place dans le groupe"))} contre ${dayTxt(f("collective", "sprint", "son niveau d'avant"))}. Ce jalon sert surtout quand une joueuse revient seule dans un groupe qui s'entraîne : trop peu de reprises individuelles mesurables ici pour le montrer.</p>`; }
+  h += `<p class="muted">${O.stats.goalkeepers_excluded} gardiennes probables écartées (vitesse max médiane sous 20 km/h). Le ratio à la médiane de l'équipe est instable jour par jour (médiane de l'équipe nulle ${pct(O.stats.sprint_days_team_median_zero)} des jours pour le sprint) : le percentile est retenu. SoccerMon ne permet pas le volet compétitif (temps de jeu, adversaires), ni de distinguer match et entraînement.</p>`;
+  $("#opp-text").innerHTML = h;
+}
 function renderExposure() {
   const E = D.exposure;
   $("#expo-block").hidden = !E;
@@ -920,6 +1012,8 @@ function renderResearch() {
   renderExposure();
   renderThresholds();
   renderReturns();
+  renderMilestones();
+  renderOpportunity();
   const pr = D.injury_profile;
   if (!pr) { $("#research-text").innerHTML = '<p class="empty">Aucune déclaration de blessure dans les données chargées.</p>'; return; }
   const band = (q1, q3, med, color, fmt) => [
