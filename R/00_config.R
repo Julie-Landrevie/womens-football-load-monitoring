@@ -64,6 +64,26 @@ CONFIG <- list(
   return_weeks            = 8,   # semaines suivies après la reprise
   return_min_gps_coverage = 0.6, # part minimale des jours actifs avec GPS (référence et semaine)
 
+  # Retour au jeu par critères (10_return_criteria.R) : jalons au jour près
+  return_milestone_window = 7,          # jours de la fenêtre glissante (J7 au plus tôt)
+  return_milestone_levels = c(0.9, 1),  # jalons : 90 % puis 100 % de la référence
+  return_follow_days      = 56,         # suivi après la reprise (= return_weeks x 7)
+  # Vitesse max : référence et nombre minimal de séances GPS dans la fenêtre.
+  # Test du 27/10/2026 sur des semaines sans absence (1 935 fenêtres, 61 joueuses) :
+  # faux déficit (< 90 %) 12 % avec la médiane des maxima hebdomadaires, 19 % avec
+  # la moyenne des 3 meilleures séances (SkillCorner), 27 % avec le maximum sur
+  # 28 jours ; avec 1-2 séances dans la fenêtre, 39 % même avec la médiane, contre
+  # 6 % à partir de 3 séances.
+  return_vmax_ref          = "median_weekly",  # ou "top3" (moyenne des 3 meilleures séances)
+  return_vmax_min_sessions = 3,
+
+  # Effort relatif à l'opportunité (11_opportunity.R)
+  opp_min_players = 8,    # joueuses de champ avec GPS le même jour, sinon pas d'indice
+  opp_gk_vmax     = 20,   # km/h : vitesse max médiane sous ce seuil = gardienne probable
+  opp_group_level = 0.9,  # jalon « sa place dans le groupe » : indice relatif sur 7 jours
+                          # >= 90 % de son indice relatif des 28 jours avant l'absence
+  opp_min_base_days = 6,  # jours GPS minimum avant l'absence pour établir cet indice
+
   # Profil accélération-vitesse (08_as_profile.R, Morin et al. 2021)
   as_min_speed  = 3,    # m/s : ajustement au-delà de cette vitesse
   as_min_points = 8,    # tranches de 0,2 m/s minimum pour ajuster la droite

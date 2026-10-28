@@ -71,6 +71,23 @@ if (!is.null(returns)) {
   message("   Retour au jeu (chiffres du README, résultat 7) :")
   for (k in names(returns$stats)) message("     ", k, " = ", paste(returns$stats[[k]], collapse = " / "))
 }
+# Retour au jeu par critères : jours pour retrouver 90 % puis 100 % de la référence
+if (!is.null(returns)) {
+  returns$milestones <- compute_milestones(metrics, returns$absences)
+  if (!is.null(returns$milestones)) {
+    message("   Jalons de reprise (90 % de la référence) :")
+    for (k in names(returns$milestones$stats)) message("     ", k, " = ", paste(returns$milestones$stats[[k]], collapse = " / "))
+  }
+}
+# Effort relatif à l'opportunité : la joueuse
+# rapportée aux joueuses de champ de son équipe présentes le même jour
+opportunity <- compute_opportunity(gps_daily, distinct(metrics, player, label, team),
+                                   if (!is.null(returns)) returns$absences,
+                                   if (!is.null(returns$milestones)) returns$milestones$table)
+if (!is.null(opportunity)) {
+  message("   Effort relatif à l'opportunité :")
+  for (k in names(opportunity$stats)) message("     ", k, " = ", paste(opportunity$stats[[k]], collapse = " / "))
+}
 as_month <- as_monthly(as_sessions, distinct(metrics, player, label, team))
 if (!is.null(as_month) && nrow(as_month))
   message(sprintf("   Profils A-S mensuels : %d ; A0 médian %.2f m/s², S0 médian %.2f m/s",
@@ -115,6 +132,20 @@ if (!is.null(returns)) {
   write_csv(returns$absences, file.path(out_tab, "reprises_absences.csv"))
   if (!is.null(returns$curves)) write_csv(returns$curves, file.path(out_tab, "reprises_courbes.csv"))
   if (!is.null(returns$summary)) write_csv(returns$summary, file.path(out_tab, "reprises_synthese.csv"))
+  if (!is.null(returns$milestones)) {
+    ms <- returns$milestones
+    write_csv(ms$table |> select(-event), file.path(out_tab, "reprises_jalons.csv"))
+    write_csv(ms$summary, file.path(out_tab, "reprises_jalons_synthese.csv"))
+    write_csv(ms$order, file.path(out_tab, "reprises_jalons_ordre.csv"))
+    write_csv(ms$lines, file.path(out_tab, "reprises_jalons_lignes.csv"))
+  }
+}
+if (!is.null(opportunity)) {
+  write_csv(opportunity$index, file.path(out_tab, "effort_relatif.csv"))
+  write_csv(opportunity$stability, file.path(out_tab, "effort_relatif_stabilite.csv"))
+  write_csv(opportunity$ranks, file.path(out_tab, "effort_relatif_rangs.csv"))
+  if (!is.null(opportunity$returns)) write_csv(opportunity$returns |> select(-event), file.path(out_tab, "reprises_niveau_groupe.csv"))
+  if (!is.null(opportunity$returns_summary)) write_csv(opportunity$returns_summary, file.path(out_tab, "reprises_niveau_groupe_synthese.csv"))
 }
 if (!is.null(as_month)) write_csv(as_month, file.path(out_tab, "profil_acceleration_vitesse_mensuel.csv"))
 write_csv(tibble::enframe(lapply(exposure, paste, collapse = " / "), name = "indicateur", value = "valeur") |>
@@ -141,6 +172,7 @@ save_fig(fig_internal_external(metrics), "06_interne_externe.png", w = 10, h = 5
 save_fig(fig_exposure(metrics), "08_ratio_et_base.png", w = 10, h = 5.5)
 save_fig(fig_return_curves(returns$summary), "09_retour_au_jeu.png", w = 12, h = 4.8)
 save_fig(fig_threshold_coverage(thresholds), "10_seuils_couverture.png", w = 11, h = 5)
+save_fig(fig_return_milestones(returns$milestones$summary), "12_jalons_reprise.png", w = 8, h = 8)
 save_fig(fig_threshold_ranks(thresholds), "11_seuils_profils_caches.png", w = 8, h = 7.5)
 if (!is.null(thresholds)) {
   write_csv(thresholds$coverage, file.path(out_tab, "seuils_couverture.csv"))
@@ -156,6 +188,7 @@ saveRDS(list(daily_long = daily_long, injuries = injuries, metrics = metrics,
              inj_win = inj_win, example_players = example_players, gps_qc = gps_qc,
              exposure = exposure, returns = returns, as_month = as_month,
              thresholds = thresholds, gps_labels = GPS_LABELS,
+             opportunity = if (is.null(opportunity)) NULL else opportunity[c("stability", "ranks", "returns_summary", "stats")],
              config = CONFIG, data_dir = CONFIG$data_dir),
         file.path(CONFIG$output_dir, "pipeline.rds"))
 
@@ -170,6 +203,7 @@ save_doc(fig_internal_external(metrics), "interne_externe.png", 10, 5)
 save_doc(fig_exposure(metrics), "ratio_et_base.png", 10, 5.5)
 save_doc(fig_return_curves(returns$summary), "retour_au_jeu.png", 12, 4.8)
 save_doc(fig_threshold_coverage(thresholds), "seuils_couverture.png", 11, 5)
+save_doc(fig_return_milestones(returns$milestones$summary), "jalons_reprise.png", 8, 8)
 save_doc(fig_threshold_ranks(thresholds), "seuils_profils_caches.png", 8, 7.5)
 
 message("   Tableau de bord web")

@@ -136,7 +136,8 @@ export_dashboard <- function(res, out_dir = "docs") {
     internal_external = ie,
     exposure = res$exposure,
     returns = export_returns(res$returns),
-    thresholds = export_thresholds(res$thresholds)
+    thresholds = export_thresholds(res$thresholds),
+    opportunity = export_opportunity(res$opportunity)
   )
 
   js <- paste0("// Généré par run_pipeline.R — ne pas modifier à la main\nwindow.DASHBOARD_DATA = ",
@@ -154,6 +155,11 @@ export_returns <- function(rt) {
   ab <- rt$absences
   eps <- ab |> transmute(id = label, type, start = format(absence_start), end = format(absence_end),
                          ret = format(return_date), days = absence_days, injury = injury_declared)
+  # Jalons de reprise (10_return_criteria.R) : une ligne lisible par reprise
+  if (!is.null(rt$milestones) && !is.null(rt$milestones$lines)) {
+    eps <- eps |> left_join(rt$milestones$lines |> transmute(id = label, ret = format(return_date), jalons),
+                            by = c("id", "ret"))
+  }
   curves <- NULL
   if (!is.null(rt$curves)) {
     cv <- rt$curves |> arrange(label, return_date, week)
@@ -165,7 +171,23 @@ export_returns <- function(rt) {
   }
   list(episodes = eps, curves = curves,
        summary = if (is.null(rt$summary)) NULL else rt$summary |> mutate(across(c(med, q1, q3), ~ round(.x, 3))),
-       stats = rt$stats)
+       stats = rt$stats,
+       milestones = if (is.null(rt$milestones)) NULL else list(
+         summary = rt$milestones$summary |> mutate(metric = as.character(metric),
+                                                   share_not_reached = round(share_not_reached, 3)),
+         order = rt$milestones$order,
+         stats = rt$milestones$stats))
+}
+
+#' Effort relatif à l'opportunité : stabilité, joueuses qui bougent, retour au jeu
+export_opportunity <- function(op) {
+  if (is.null(op) || is.null(op$stability)) return(NULL)
+  list(stability = op$stability |> mutate(rho = round(rho, 3)),
+       ranks = if (is.null(op$ranks)) NULL else op$ranks |>
+         transmute(metric, label = coalesce(label, substr(player, 1, 11)), days,
+                   pct_brut = round(pct_brut, 1), pct_relatif = round(pct_relatif, 1)),
+       returns = op$returns_summary,
+       stats = op$stats)
 }
 
 #' Seuils masculins / féminins : couverture, courbes, rangs, chiffres clés
