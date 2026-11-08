@@ -88,6 +88,12 @@ if (!is.null(opportunity)) {
   message("   Effort relatif à l'opportunité :")
   for (k in names(opportunity$stats)) message("     ", k, " = ", paste(opportunity$stats[[k]], collapse = " / "))
 }
+# Charge perçue et GPS : les seuils féminins expliquent-ils mieux la sRPE ?
+srpe_gps <- compute_srpe_gps(metrics, gps_daily)
+if (!is.null(srpe_gps)) {
+  message("   Charge perçue et GPS (modèle mixte, seuils masculins / féminins) :")
+  for (k in names(srpe_gps$stats)) message("     ", k, " = ", paste(srpe_gps$stats[[k]], collapse = " / "))
+}
 as_month <- as_monthly(as_sessions, distinct(metrics, player, label, team))
 if (!is.null(as_month) && nrow(as_month))
   message(sprintf("   Profils A-S mensuels : %d ; A0 médian %.2f m/s², S0 médian %.2f m/s",
@@ -146,6 +152,13 @@ if (!is.null(opportunity)) {
   write_csv(opportunity$ranks, file.path(out_tab, "effort_relatif_rangs.csv"))
   if (!is.null(opportunity$returns)) write_csv(opportunity$returns |> select(-event), file.path(out_tab, "reprises_niveau_groupe.csv"))
   if (!is.null(opportunity$returns_summary)) write_csv(opportunity$returns_summary, file.path(out_tab, "reprises_niveau_groupe_synthese.csv"))
+}
+if (!is.null(srpe_gps)) {
+  write_csv(srpe_gps$models, file.path(out_tab, "srpe_gps_modeles.csv"))
+  write_csv(srpe_gps$coefficients, file.path(out_tab, "srpe_gps_coefficients.csv"))
+  write_csv(srpe_gps$single, file.path(out_tab, "srpe_gps_indicateurs.csv"))
+  write_csv(srpe_gps$per_player |> left_join(distinct(metrics, player, label), by = "player"),
+            file.path(out_tab, "srpe_gps_par_joueuse.csv"))
 }
 if (!is.null(as_month)) write_csv(as_month, file.path(out_tab, "profil_acceleration_vitesse_mensuel.csv"))
 write_csv(tibble::enframe(lapply(exposure, paste, collapse = " / "), name = "indicateur", value = "valeur") |>

@@ -84,6 +84,10 @@ CONFIG <- list(
                           # >= 90 % de son indice relatif des 28 jours avant l'absence
   opp_min_base_days = 6,  # jours GPS minimum avant l'absence pour établir cet indice
 
+  # Charge perçue et GPS (12_srpe_gps.R) : seuils masculins ou féminins ?
+  sg_min_duration = 10,   # minutes GPS minimum pour garder un jour
+  sg_rpe_range    = c(1, 10),  # RPE implicite (sRPE / durée GPS) jugée cohérente
+
   # Profil accélération-vitesse (08_as_profile.R, Morin et al. 2021)
   as_min_speed  = 3,    # m/s : ajustement au-delà de cette vitesse
   as_min_points = 8,    # tranches de 0,2 m/s minimum pour ajuster la droite
