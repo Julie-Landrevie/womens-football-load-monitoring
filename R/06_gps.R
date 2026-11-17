@@ -37,6 +37,8 @@ GPS_CONFIG <- list(
   w_hi_speed     = 19 / 3.6,  # féminins : haute intensité > 19 km/h (HSR 19-23 + sprint)
   w_sprint_speed = 23 / 3.6,  # féminins : sprint > 23 km/h
   m_sprint_speed = 25 / 3.6,  # masculins : sprint > 25 km/h
+  m_hi198_speed  = 19.8 / 3.6, # masculins usuels : haute vitesse > 19,8 km/h
+  m_sp252_speed  = 25.2 / 3.6, # masculins usuels : sprint > 25,2 km/h
   w_acc_med      = 1.4,       # féminins : accélération moyenne 1,4-2,7 m/s²
   w_acc_high     = 2.7,       # féminins : accélération haute > 2,7 m/s²
   m_acc_high     = 3,         # masculins : accélération haute > 3 m/s²
@@ -143,6 +145,8 @@ gps_summarise_df <- function(df, cfg = GPS_CONFIG) {
     hi_w_m       = sum(dist_step[v_ok > cfg$w_hi_speed]),
     sprint_w_m   = sum(dist_step[v_ok > cfg$w_sprint_speed]),
     sprint_men_m = sum(dist_step[v_ok > cfg$m_sprint_speed]),
+    hi_men198_m  = sum(dist_step[v_ok > cfg$m_hi198_speed]),
+    sprint_men252_m = sum(dist_step[v_ok > cfg$m_sp252_speed]),
     n_sprint_w   = count_efforts(smooth > cfg$w_sprint_speed, cfg$sprint_min_samples),
     n_sprint_men = count_efforts(smooth > cfg$m_sprint_speed, cfg$sprint_min_samples),
     n_acc_med_w  = count_efforts_band(acc, cfg$w_acc_med, cfg$w_acc_high, cfg$acc_min_samples),
@@ -240,14 +244,14 @@ gps_daily_from_sessions <- function(sessions, cfg = GPS_CONFIG) {
               duration_min = sum(duration_min), signal_min = sum(signal_min),
               total_km = sum(total_km), hsr_m = sum(hsr_m), sprint_m = sum(sprint_m),
               vmax_kmh = max(vmax_kmh), n_acc = sum(n_acc), n_dec = sum(n_dec),
-              across(any_of(c("run_w_m", "hi_w_m", "sprint_w_m", "sprint_men_m", "n_sprint_w", "n_sprint_men",
+              across(any_of(c("run_w_m", "hi_w_m", "sprint_w_m", "sprint_men_m", "hi_men198_m", "sprint_men252_m", "n_sprint_w", "n_sprint_men",
                               "n_acc_med_w", "n_acc_high_w", "n_acc_high_men", "n_dec_high_w", "n_dec_high_men", "n_t19")),
                      ~ sum(.x, na.rm = TRUE)),
               across(any_of("vmax_1s_kmh"), ~ suppressWarnings(max(.x, na.rm = TRUE))),
               across(any_of("t19_best_s"), ~ suppressWarnings(min(.x, na.rm = TRUE))),
               .groups = "drop") |>
     mutate(across(any_of(c("vmax_1s_kmh", "t19_best_s")), ~ ifelse(is.finite(.x), round(.x, 2), NA_real_)),
-           across(any_of(c("run_w_m", "hi_w_m", "sprint_w_m", "sprint_men_m")), ~ round(.x, 1))) |>
+           across(any_of(c("run_w_m", "hi_w_m", "sprint_w_m", "sprint_men_m", "hi_men198_m", "sprint_men252_m")), ~ round(.x, 1))) |>
     mutate(across(c(duration_min, signal_min, total_km, vmax_kmh), ~ round(.x, 3)),
            across(c(hsr_m, sprint_m), ~ round(.x, 1)), gap_share = round(gap_share, 4))
   qc <- tibble(

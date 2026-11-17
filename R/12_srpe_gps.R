@@ -33,18 +33,36 @@
 # meilleur seuil pour le staff : seulement une mesure plus proche du ressenti.
 # =============================================================================
 
+#
+# Tests complémentaires (échange du 11/11) :
+#   - contribution propre : modèle complet avec tous les indicateurs, puis
+#     retrait de chacun ; ce qu'il apporte une fois les autres pris en compte
+#     (les indicateurs sont très corrélés : l'ordre « un par un » ne suffit pas) ;
+#   - seuils masculins usuels 19,8 / 25,2 km/h (colonnes calculées par
+#     run_gps.R ; ignorés s'ils sont absents de gps_daily.csv) ;
+#   - jours de match estimés et entraînements séparés ;
+#   - jours à une seule séance GPS contre jours à plusieurs séances.
+
 suppressPackageStartupMessages({ library(dplyr); library(tidyr) })
 
 SG_VARS <- list(
   base      = c("duration_min", "total_km", "vmax_1s_kmh", "match"),
   masculins = c("hi_w_m", "sprint_men_m", "n_acc_high_men", "n_dec_high_men"),
-  feminins  = c("hi_w_m", "sprint_w_m", "n_acc_high_w", "n_dec_high_w"))
+  feminins  = c("hi_w_m", "sprint_w_m", "n_acc_high_w", "n_dec_high_w"),
+  masculins_198 = c("hi_men198_m", "sprint_men252_m", "n_acc_high_men", "n_dec_high_men"))
+
+# indicateurs du modèle complet (contribution propre), par jeu de seuils
+SG_FULL <- list(
+  feminins  = c("total_km", "hsr_m", "hi_w_m", "sprint_w_m", "vmax_1s_kmh", "n_acc_high_w", "n_dec_high_w"),
+  masculins = c("total_km", "hsr_m", "hi_w_m", "sprint_men_m", "vmax_1s_kmh", "n_acc_high_men", "n_dec_high_men"),
+  masculins_198 = c("total_km", "hsr_m", "hi_men198_m", "sprint_men252_m", "vmax_1s_kmh", "n_acc_high_men", "n_dec_high_men"))
 
 SG_SINGLE <- c(total_km = "Distance totale", hsr_m = "Course rapide > 16 km/h",
                hi_w_m = "Haute intensité > 19 km/h", sprint_w_m = "Sprint > 23 km/h",
                sprint_men_m = "Sprint > 25 km/h", vmax_1s_kmh = "Vitesse max (1 s)",
                n_acc_high_w = "Accélérations > 2,7 m/s²", n_acc_high_men = "Accélérations > 3 m/s²",
-               n_dec_high_w = "Décélérations hautes (seuil féminin)", n_dec_high_men = "Décélérations hautes (seuil masculin)")
+               n_dec_high_w = "Décélérations hautes (seuil féminin)", n_dec_high_men = "Décélérations hautes (seuil masculin)",
+               hi_men198_m = "Haute vitesse > 19,8 km/h", sprint_men252_m = "Sprint > 25,2 km/h")
 
 #' Table jour-joueuse : sRPE (charge déclarée) + GPS du même jour
 srpe_gps_data <- function(metrics, gps_daily, cfg = CONFIG) {
@@ -52,7 +70,8 @@ srpe_gps_data <- function(metrics, gps_daily, cfg = CONFIG) {
             "sprint_men_m", "n_acc_high_w", "n_acc_high_men", "n_dec_high_w", "n_dec_high_men")
   if (is.null(gps_daily) || !all(need %in% names(gps_daily))) return(NULL)
   gk <- opp_goalkeepers(gps_daily, cfg)
-  g <- gps_daily |> filter(!player %in% gk) |> select(player, date, all_of(need))
+  g <- gps_daily |> filter(!player %in% gk) |>
+    select(player, date, all_of(need), any_of(c("n_files", "hi_men198_m", "sprint_men252_m")))
   # jour de match estimé : le jour le plus chargé de la semaine pour l'équipe
   # (médiane de la distance totale, au moins `opp_min_players` joueuses)
   md <- g |> mutate(team = sub("-.*$", "", player), week = format(date, "%G-%V")) |>
@@ -119,7 +138,7 @@ sg_cv <- function(d, vars, folds = 5, seed = 1) {
 sg_single <- function(d) {
   m0 <- sg_fit(d, "duration_min"); r0 <- sg_r2(m0)[["r2_marginal"]]; a0 <- stats::AIC(m0)
   ctr <- function(x, p) x - stats::ave(x, p)
-  bind_rows(lapply(names(SG_SINGLE), function(v) {
+  bind_rows(lapply(intersect(names(SG_SINGLE), names(d)), function(v) {
     m <- sg_fit(d, c("duration_min", v))
     tibble(indicator = v, label = unname(SG_SINGLE[v]),
            gain_r2_marginal = sg_r2(m)[["r2_marginal"]] - r0,
@@ -130,6 +149,37 @@ sg_single <- function(d) {
   })) |> arrange(desc(gain_r2_marginal))
 }
 
+#' Contribution propre : retrait de chaque indicateur du modèle complet
+sg_unique <- function(d, set) {
+  vars <- SG_FULL[[set]]
+  if (!all(vars %in% names(d))) return(NULL)
+  full <- sg_fit(d, c("duration_min", "match", vars))
+  r_full <- sg_r2(full)[["r2_marginal"]]; a_full <- stats::AIC(full)
+  bind_rows(lapply(vars, function(v) {
+    m <- sg_fit(d, c("duration_min", "match", setdiff(vars, v)))
+    tibble(seuils = set, indicator = v, label = unname(SG_SINGLE[v]),
+           perte_r2_si_retire = r_full - sg_r2(m)[["r2_marginal"]],
+           perte_aic_si_retire = stats::AIC(m) - a_full,
+           coef_std = lme4::fixef(full)[[v]])
+  })) |> mutate(r2_modele_complet = r_full) |> arrange(desc(perte_r2_si_retire))
+}
+
+#' Match estimé contre entraînement : mêmes modèles sur chaque sous-ensemble
+sg_by_context <- function(d, specs) {
+  bind_rows(lapply(c(match = 1, entrainement = 0), function(k) {
+    s <- d[d$match == k, ]
+    if (nrow(s) < 200) return(NULL)
+    ctx <- if (k == 1) "match estimé" else "entraînement"
+    r <- bind_rows(lapply(names(specs), function(nm) {
+      m <- sg_fit(s, setdiff(specs[[nm]], "match"))
+      tibble(contexte = ctx, model = nm, n_days = nrow(s), n_players = n_distinct(s$player),
+             r2_marginal = sg_r2(m)[["r2_marginal"]], aic = stats::AIC(m))
+    }))
+    top <- sg_single(s)
+    r |> mutate(top_indicateurs = paste(sprintf("%s +%.3f", head(top$indicator, 4), head(top$gain_r2_marginal, 4)), collapse = " · "))
+  }))
+}
+
 #' Tout le module en un appel (utilisé par run_pipeline.R)
 compute_srpe_gps <- function(metrics, gps_daily, cfg = CONFIG) {
   if (!requireNamespace("lme4", quietly = TRUE)) {
@@ -138,7 +188,10 @@ compute_srpe_gps <- function(metrics, gps_daily, cfg = CONFIG) {
   }
   d_all <- srpe_gps_data(metrics, gps_daily, cfg)
   if (is.null(d_all) || nrow(d_all) < 200) return(NULL)
-  num <- union(setdiff(unique(unlist(SG_VARS)), "match"), names(SG_SINGLE))
+  num <- intersect(union(setdiff(unique(unlist(SG_VARS)), "match"), names(SG_SINGLE)), names(d_all))
+  has198 <- all(c("hi_men198_m", "sprint_men252_m") %in% names(d_all)) &&
+    !all(is.na(d_all$hi_men198_m))
+  if (has198) d_all <- d_all |> drop_na(hi_men198_m, sprint_men252_m)
   zs <- function(x) x |> mutate(across(all_of(num), ~ as.numeric(scale(.x))))
   # contrôle : mêmes modèles sur tous les jours, sans le filtre de cohérence
   r2_all <- sg_r2(sg_fit(zs(d_all), c(SG_VARS$base, SG_VARS$feminins)))
@@ -147,9 +200,23 @@ compute_srpe_gps <- function(metrics, gps_daily, cfg = CONFIG) {
   specs <- list(base = SG_VARS$base,
                 masculins = c(SG_VARS$base, SG_VARS$masculins),
                 feminins = c(SG_VARS$base, SG_VARS$feminins))
+  if (has198) specs$masculins_198 <- c(SG_VARS$base, SG_VARS$masculins_198)
   fits <- lapply(specs, function(v) sg_fit(d, v))
   cvs <- lapply(specs, function(v) sg_cv(d, v))
   single <- sg_single(d)
+  unique_c <- bind_rows(lapply(names(specs)[names(specs) != "base"], function(k) sg_unique(d, k)))
+  cor_mat <- round(stats::cor(d[, intersect(names(SG_SINGLE), names(d))], method = "spearman"), 2)
+  context <- sg_by_context(d, specs)
+  # doubles séances : jours à plusieurs fichiers GPS
+  multi <- if ("n_files" %in% names(d_all)) {
+    d_all |> mutate(seances = if_else(n_files >= 2, "2 séances GPS ou plus", "1 séance GPS")) |>
+      group_by(seances) |> summarise(n_days = n(), share_coherent = mean(coherent),
+                                     rpe_implicite_mediane = stats::median(rpe_implicite), .groups = "drop")
+  } else NULL
+  r2_single_session <- if ("n_files" %in% names(d0)) {
+    s1 <- d[d0$n_files == 1, ]
+    if (nrow(s1) >= 200) sg_r2(sg_fit(s1, specs$feminins))[["r2_marginal"]] else NA_real_
+  } else NA_real_
   models <- bind_rows(lapply(names(specs), function(k) {
     r <- sg_r2(fits[[k]])
     tibble(model = k, n_days = nrow(d), n_players = n_distinct(d$player),
@@ -180,6 +247,17 @@ compute_srpe_gps <- function(metrics, gps_daily, cfg = CONFIG) {
     players_better_women = sprintf("%d sur %d", sum(pp$rmse_f < pp$rmse_m), nrow(pp)),
     r2_duration_only = round(sg_r2(sg_fit(d, "duration_min"))[["r2_marginal"]], 3),
     single_gain_r2 = paste(sprintf("%s +%.3f", single$indicator, single$gain_r2_marginal), collapse = " · "),
-    single_r_intra = paste(sprintf("%s %.2f", single$indicator, single$r_intra_joueuse), collapse = " · "))
-  list(data = d0, models = models, coefficients = coefs, per_player = pp, single = single, stats = stats)
+    single_r_intra = paste(sprintf("%s %.2f", single$indicator, single$r_intra_joueuse), collapse = " · "),
+    seuils_198_252 = if (has198) sprintf("R² marginal %s · AIC féminins − masculins 19,8/25,2 : %.1f · erreur par joueuse %s",
+                                         r("masculins_198", "r2_marginal"),
+                                         models$aic[models$model == "feminins"] - models$aic[models$model == "masculins_198"],
+                                         round(r("masculins_198", "cv_player_rmse"))) else "colonnes absentes : relancer run_gps.R",
+    unique_feminins = { u <- unique_c[unique_c$seuils == "feminins", ]
+      paste(sprintf("%s %+.3f", u$indicator, u$perte_r2_si_retire), collapse = " · ") },
+    contexte = paste(sprintf("%s (%d j) R² féminins %.3f", context$contexte[context$model == "feminins"],
+                             context$n_days[context$model == "feminins"], context$r2_marginal[context$model == "feminins"]), collapse = " · "),
+    doubles_seances = if (is.null(multi)) NA else paste(sprintf("%s : %d j, cohérents %.0f %%", multi$seances, multi$n_days, 100 * multi$share_coherent), collapse = " · "),
+    r2_une_seance_feminins = round(r2_single_session, 3))
+  list(data = d0, models = models, coefficients = coefs, per_player = pp, single = single,
+       unique = unique_c, correlations = cor_mat, context = context, multi = multi, stats = stats)
 }
