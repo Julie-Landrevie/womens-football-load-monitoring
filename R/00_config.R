@@ -88,6 +88,13 @@ CONFIG <- list(
   sg_min_duration = 10,   # minutes GPS minimum pour garder un jour
   sg_rpe_range    = c(1, 10),  # RPE implicite (sRPE / durée GPS) jugée cohérente
   sg_match_min_reports = 3,    # joueuses notant leur performance le même jour = vrai match
+  # Jour de match estimé (modules B et C) : médiane d'équipe de la distance
+  # totale > 7 km (au moins `opp_min_players` joueuses avec GPS). Vérifié le
+  # 18/11/2026 sur les 24 matchs notés avec GPS (game-performance.csv) :
+  # 23 retrouvés (96 %), 91 % de vrais matchs parmi les jours marqués
+  # d'août à octobre 2021 ; l'ancienne règle « jour le plus chargé de la
+  # semaine » n'en retrouvait que 75 % (elle rate les matchs en semaine).
+  match_team_km = 7,
 
   # Profil accélération-vitesse (08_as_profile.R, Morin et al. 2021)
   as_min_speed  = 3,    # m/s : ajustement au-delà de cette vitesse

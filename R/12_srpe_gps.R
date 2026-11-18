@@ -111,12 +111,12 @@ srpe_gps_data <- function(metrics, gps_daily, cfg = CONFIG) {
   gk <- opp_goalkeepers(gps_daily, cfg)
   g <- gps_daily |> filter(!player %in% gk) |>
     select(player, date, all_of(need), any_of(c("n_files", "hi_men198_m", "sprint_men252_m")))
-  # jour de match estimé : le jour le plus chargé de la semaine pour l'équipe
-  # (médiane de la distance totale, au moins `opp_min_players` joueuses)
-  md <- g |> mutate(team = sub("-.*$", "", player), week = format(date, "%G-%V")) |>
-    group_by(team, date, week) |> filter(n() >= cfg$opp_min_players) |>
+  # jour de match estimé : médiane d'équipe de la distance totale > `match_team_km`
+  # (au moins `opp_min_players` joueuses avec GPS ; voir 00_config.R)
+  md <- g |> mutate(team = sub("-.*$", "", player)) |>
+    group_by(team, date) |> filter(n() >= cfg$opp_min_players) |>
     summarise(km = median(total_km), .groups = "drop") |>
-    group_by(team, week) |> slice_max(km, n = 1, with_ties = FALSE) |> ungroup() |>
+    filter(km > cfg$match_team_km) |>
     transmute(team, date, match = 1)
   metrics |>
     select(player, label, date, srpe = load) |>
@@ -124,11 +124,12 @@ srpe_gps_data <- function(metrics, gps_daily, cfg = CONFIG) {
     mutate(team = sub("-.*$", "", player)) |>
     left_join(md, by = c("team", "date")) |>
     mutate(match = coalesce(match, 0), match_est = match) -> x
-  # vrais jours de match, s'ils sont disponibles
+  # matchs notés par les joueuses, s'ils sont disponibles : les notes sont
+  # incomplètes (26 matchs), on garde donc aussi l'estimation (match = l'un ou l'autre)
   games <- sg_games(cfg$data_dir, cfg)
   if (!is.null(games) && nrow(games)) {
     x <- x |> left_join(games, by = c("team", "date")) |>
-      mutate(match_true = coalesce(match_true, 0), match = match_true)
+      mutate(match_true = coalesce(match_true, 0), match = pmax(match_true, match_est))
   }
   # séances déclarées, si disponibles
   sess <- sg_sessions(cfg$data_dir)

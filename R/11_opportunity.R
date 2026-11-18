@@ -57,16 +57,14 @@ opportunity_index <- function(gps_daily, cfg = CONFIG) {
     mutate(ok = n_present >= cfg$opp_min_players,
            rel = if_else(ok & team_median > 0, value / team_median, NA_real_),
            pct = if_else(ok, pct, NA_real_))
-  # 4. Jours de match (estimation) : le jour le plus chargé de chaque semaine
-  #    pour toute l'équipe (médiane de la distance totale). Une estimation,
+  # 4. Jours de match (estimation) : médiane d'équipe de la distance totale
+  #    au-dessus de `match_team_km` (7 km). Vérifiée sur les matchs notés par
+  #    les joueuses (game-performance.csv) : 96 % retrouvés. Une estimation,
   #    jamais une donnée : SoccerMon ne distingue pas match et entraînement.
   match_days <- long |>
     filter(metric == "total", ok) |>
     distinct(team, date, team_median) |>
-    mutate(week = format(date, "%G-%V")) |>
-    group_by(team, week) |>
-    slice_max(team_median, n = 1, with_ties = FALSE) |>
-    ungroup() |>
+    filter(team_median > cfg$match_team_km) |>
     transmute(team, date, match_probable = TRUE)
   long |>
     left_join(match_days, by = c("team", "date")) |>
