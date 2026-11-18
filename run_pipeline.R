@@ -161,6 +161,10 @@ if (!is.null(srpe_gps)) {
   write_csv(tibble::as_tibble(srpe_gps$correlations, rownames = "indicateur"), file.path(out_tab, "srpe_gps_correlations.csv"))
   write_csv(srpe_gps$context, file.path(out_tab, "srpe_gps_match_entrainement.csv"))
   if (!is.null(srpe_gps$multi)) write_csv(srpe_gps$multi, file.path(out_tab, "srpe_gps_doubles_seances.csv"))
+  if (!is.null(srpe_gps$seance_unique)) {
+    write_csv(srpe_gps$seance_unique$single, file.path(out_tab, "srpe_gps_seance_unique_indicateurs.csv"))
+    write_csv(srpe_gps$seance_unique$unique, file.path(out_tab, "srpe_gps_seance_unique_contribution.csv"))
+  }
   write_csv(srpe_gps$per_player |> left_join(distinct(metrics, player, label), by = "player"),
             file.path(out_tab, "srpe_gps_par_joueuse.csv"))
 }

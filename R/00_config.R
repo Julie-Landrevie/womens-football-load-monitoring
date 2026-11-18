@@ -87,6 +87,7 @@ CONFIG <- list(
   # Charge perçue et GPS (12_srpe_gps.R) : seuils masculins ou féminins ?
   sg_min_duration = 10,   # minutes GPS minimum pour garder un jour
   sg_rpe_range    = c(1, 10),  # RPE implicite (sRPE / durée GPS) jugée cohérente
+  sg_match_min_reports = 3,    # joueuses notant leur performance le même jour = vrai match
 
   # Profil accélération-vitesse (08_as_profile.R, Morin et al. 2021)
   as_min_speed  = 3,    # m/s : ajustement au-delà de cette vitesse

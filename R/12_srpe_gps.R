@@ -42,6 +42,15 @@
 #     run_gps.R ; ignorés s'ils sont absents de gps_daily.csv) ;
 #   - jours de match estimés et entraînements séparés ;
 #   - jours à une seule séance GPS contre jours à plusieurs séances.
+#
+# Fichiers SoccerMon supplémentaires (s'ils sont présents dans data/raw) :
+#   - training-load/session.json : charge séance par séance (sRPE, RPE, durée
+#     déclarée, date ; pas d'heure de saisie). Permet d'apparier comme le
+#     mémoire UiT : jours à UNE séance déclarée et UNE séance GPS ;
+#   - game-performance/game-performance.csv : note de performance donnée par
+#     les joueuses après les matchs. Une date notée par au moins
+#     `sg_match_min_reports` joueuses d'une équipe = vrai jour de match pour
+#     l'équipe (remplace l'estimation « jour le plus chargé de la semaine »).
 
 suppressPackageStartupMessages({ library(dplyr); library(tidyr) })
 
@@ -64,6 +73,36 @@ SG_SINGLE <- c(total_km = "Distance totale", hsr_m = "Course rapide > 16 km/h",
                n_dec_high_w = "Décélérations hautes (seuil féminin)", n_dec_high_men = "Décélérations hautes (seuil masculin)",
                hi_men198_m = "Haute vitesse > 19,8 km/h", sprint_men252_m = "Sprint > 25,2 km/h")
 
+#' Séances déclarées (session.json) -> une ligne par joueuse et par jour
+sg_sessions <- function(dir = CONFIG$data_dir) {
+  f <- list.files(dir, pattern = "^session\\.json$", recursive = TRUE, full.names = TRUE)
+  if (!length(f) || !requireNamespace("jsonlite", quietly = TRUE)) return(NULL)
+  j <- jsonlite::fromJSON(f[1], simplifyVector = TRUE)
+  s <- bind_rows(lapply(names(j), function(p) {
+    x <- j[[p]]
+    if (!is.data.frame(x) || !nrow(x)) return(NULL)
+    tibble(player = p, date = as.Date(x$date, "%d.%m.%Y"),
+           srpe = as.numeric(x$srpe), rpe = as.numeric(x$rpe), duration = as.numeric(x$duration))
+  }))
+  s |> filter(!is.na(date)) |> group_by(player, date) |>
+    summarise(n_decl = n(), srpe_decl = sum(srpe, na.rm = TRUE), duration_decl = sum(duration, na.rm = TRUE),
+              rpe_decl = if (sum(duration, na.rm = TRUE) > 0) stats::weighted.mean(rpe, duration, na.rm = TRUE) else mean(rpe, na.rm = TRUE),
+              .groups = "drop")
+}
+
+#' Vrais jours de match : dates notées dans game-performance.csv
+sg_games <- function(dir = CONFIG$data_dir, cfg = CONFIG) {
+  f <- list.files(dir, pattern = "^game-performance\\.csv$", recursive = TRUE, full.names = TRUE)
+  if (!length(f)) return(NULL)
+  g <- utils::read.csv(f[1], stringsAsFactors = FALSE)
+  if (!all(c("player_name", "timestamp") %in% names(g))) return(NULL)
+  tibble(player = g$player_name, date = as.Date(substr(g$timestamp, 1, 10), "%d.%m.%Y")) |>
+    filter(!is.na(date)) |> mutate(team = sub("-.*$", "", player)) |>
+    count(team, date, name = "n_reports") |>
+    filter(n_reports >= cfg$sg_match_min_reports) |>
+    transmute(team, date, match_true = 1)
+}
+
 #' Table jour-joueuse : sRPE (charge déclarée) + GPS du même jour
 srpe_gps_data <- function(metrics, gps_daily, cfg = CONFIG) {
   need <- c("duration_min", "total_km", "vmax_1s_kmh", "hsr_m", "hi_w_m", "sprint_w_m",
@@ -84,7 +123,17 @@ srpe_gps_data <- function(metrics, gps_daily, cfg = CONFIG) {
     inner_join(g, by = c("player", "date")) |>
     mutate(team = sub("-.*$", "", player)) |>
     left_join(md, by = c("team", "date")) |>
-    mutate(match = coalesce(match, 0)) |>
+    mutate(match = coalesce(match, 0), match_est = match) -> x
+  # vrais jours de match, s'ils sont disponibles
+  games <- sg_games(cfg$data_dir, cfg)
+  if (!is.null(games) && nrow(games)) {
+    x <- x |> left_join(games, by = c("team", "date")) |>
+      mutate(match_true = coalesce(match_true, 0), match = match_true)
+  }
+  # séances déclarées, si disponibles
+  sess <- sg_sessions(cfg$data_dir)
+  if (!is.null(sess)) x <- x |> left_join(sess, by = c("player", "date"))
+  x |>
     filter(srpe > 0, duration_min >= cfg$sg_min_duration, total_km > 0) |>
     drop_na(all_of(need)) |>
     # RPE implicite = sRPE du jour / durée GPS. Hors de 1-10, la sRPE ne
@@ -169,7 +218,7 @@ sg_by_context <- function(d, specs) {
   bind_rows(lapply(c(match = 1, entrainement = 0), function(k) {
     s <- d[d$match == k, ]
     if (nrow(s) < 200) return(NULL)
-    ctx <- if (k == 1) "match estimé" else "entraînement"
+    ctx <- if (k == 1) "match" else "entraînement"
     r <- bind_rows(lapply(names(specs), function(nm) {
       m <- sg_fit(s, setdiff(specs[[nm]], "match"))
       tibble(contexte = ctx, model = nm, n_days = nrow(s), n_players = n_distinct(s$player),
@@ -212,6 +261,18 @@ compute_srpe_gps <- function(metrics, gps_daily, cfg = CONFIG) {
     d_all |> mutate(seances = if_else(n_files >= 2, "2 séances GPS ou plus", "1 séance GPS")) |>
       group_by(seances) |> summarise(n_days = n(), share_coherent = mean(coherent),
                                      rpe_implicite_mediane = stats::median(rpe_implicite), .groups = "drop")
+  } else NULL
+  # appariement séance par séance (comme le mémoire UiT) : une séance déclarée, une séance GPS
+  one <- if (all(c("n_decl", "n_files") %in% names(d0))) which(d0$n_decl %in% 1 & d0$n_files == 1) else integer(0)
+  seance_unique <- if (length(one) >= 200) {
+    s1 <- d[one, ]
+    fs <- lapply(specs, function(v) sg_fit(s1, v))
+    list(n_days = length(one), n_players = n_distinct(s1$player),
+         r2 = sapply(fs, function(m) sg_r2(m)[["r2_marginal"]]),
+         r2_cond = sapply(fs, function(m) sg_r2(m)[["r2_conditional"]]),
+         aic_fem_men = stats::AIC(fs$feminins) - stats::AIC(fs$masculins),
+         single = sg_single(s1),
+         unique = sg_unique(s1, "feminins"))
   } else NULL
   r2_single_session <- if ("n_files" %in% names(d0)) {
     s1 <- d[d0$n_files == 1, ]
@@ -257,7 +318,26 @@ compute_srpe_gps <- function(metrics, gps_daily, cfg = CONFIG) {
     contexte = paste(sprintf("%s (%d j) R² féminins %.3f", context$contexte[context$model == "feminins"],
                              context$n_days[context$model == "feminins"], context$r2_marginal[context$model == "feminins"]), collapse = " · "),
     doubles_seances = if (is.null(multi)) NA else paste(sprintf("%s : %d j, cohérents %.0f %%", multi$seances, multi$n_days, 100 * multi$share_coherent), collapse = " · "),
-    r2_une_seance_feminins = round(r2_single_session, 3))
+    r2_une_seance_feminins = round(r2_single_session, 3),
+    jours_de_match = if ("match_true" %in% names(d_all))
+      sprintf("matchs notés (game-performance) : %d jours-équipe, %.0f %% des jours-joueuses ; l'estimation en retrouve %.0f %% (jours-équipe) ; jours estimés : %.0f %% des jours-joueuses",
+              n_distinct(paste(d_all$team[d_all$match_true == 1], d_all$date[d_all$match_true == 1])),
+              100 * mean(d_all$match_true),
+              100 * { td <- distinct(d_all[d_all$match_true == 1, c("team", "date", "match_est")]); mean(td$match_est == 1) },
+              100 * mean(d_all$match_est)) else "estimés (game-performance absent)",
+    seances_declarees = if ("n_decl" %in% names(d_all))
+      sprintf("1 séance déclarée : %.0f %% des jours ; incohérents avec 2 séances déclarées ou plus : %.0f %% ; sRPE déclarée = charge du jour : %.0f %%",
+              100 * mean(d_all$n_decl %in% 1), 100 * mean(d_all$n_decl[!d_all$coherent] >= 2, na.rm = TRUE),
+              100 * mean(abs(d_all$srpe_decl - d_all$srpe) < 1, na.rm = TRUE)) else "session.json absent",
+    seance_unique = if (is.null(seance_unique)) "trop peu de jours ou session.json absent" else
+      sprintf("%d jours, %d joueuses : R² marginal base %.3f · masculins %.3f · féminins %.3f (conditionnel féminins %.3f) ; AIC féminins − masculins %.1f",
+              seance_unique$n_days, seance_unique$n_players, seance_unique$r2[["base"]], seance_unique$r2[["masculins"]],
+              seance_unique$r2[["feminins"]], seance_unique$r2_cond[["feminins"]], seance_unique$aic_fem_men),
+    seance_unique_top = if (is.null(seance_unique)) NA else
+      paste(sprintf("%s +%.3f", head(seance_unique$single$indicator, 5), head(seance_unique$single$gain_r2_marginal, 5)), collapse = " · "),
+    seance_unique_propre = if (is.null(seance_unique)) NA else
+      paste(sprintf("%s %+.3f", seance_unique$unique$indicator, seance_unique$unique$perte_r2_si_retire), collapse = " · "))
   list(data = d0, models = models, coefficients = coefs, per_player = pp, single = single,
-       unique = unique_c, correlations = cor_mat, context = context, multi = multi, stats = stats)
+       unique = unique_c, correlations = cor_mat, context = context, multi = multi,
+       seance_unique = seance_unique, stats = stats)
 }
