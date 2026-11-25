@@ -284,6 +284,10 @@ SOCCERMON_DIR=/chemin/vers/soccermon Rscript run_pipeline.R
 Sorties : `outputs/rapport_charge.html`, `outputs/figures/`, `outputs/tables/`, et le
 tableau de bord dans `docs/` (ouvrir `docs/index.html` dans un navigateur).
 
+Les figures de ce README (`docs/figures/`) sont produites à partir de `docs/data.js`,
+dans la charte visuelle du portfolio : `python3 scripts/figures_charte.py`
+(matplotlib, pandas ; les polices DM Serif Display et Lato sont téléchargées au premier lancement).
+
 Les joueuses apparaissent sous des noms courts (A-01, B-01…) attribués par ordre
 d'arrivée dans les données ; la correspondance avec les identifiants SoccerMon est
 dans `outputs/tables/correspondance_joueuses.csv`.
